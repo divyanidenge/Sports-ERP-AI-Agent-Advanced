@@ -19,7 +19,8 @@ def get_or_create_session(session_id: str, user_id: int) -> Dict[str, Any]:
             "last_entities": {
                 "sport": None,
                 "date": None,
-                "time_slot": None
+                "time_slot": None,
+                "available_slots": []
             }
         }
     return SESSION_STORE[key]
@@ -35,23 +36,35 @@ SPORTS_SYNONYMS = {
     "soccer": "Football",
     "turf": "Football",
     "basketball": "Basketball",
+    "hoops": "Basketball",
     "swimming": "Swimming",
     "swim": "Swimming",
     "pool": "Swimming",
     "table tennis": "Table Tennis",
     "tt": "Table Tennis",
-    "ping pong": "Table Tennis"
+    "ping pong": "Table Tennis",
+    "pingpong": "Table Tennis",
+    "tennis": "Tennis",
+    "lawn tennis": "Tennis",
+    "volleyball": "Volleyball",
+    "squash": "Squash"
 }
 
 TIME_SLOT_PATTERNS = [
-    (r"\b(?:6|06)\s*(?:am|baje|subah|morning)\b|\b06:00\b|\b6\s*to\s*7\s*am\b", "06:00 - 07:00"),
-    (r"\b(?:7|07)\s*(?:am|baje|subah|morning)\b|\b07:00\b|\b7\s*to\s*8\s*am\b|\b7\s*am\b", "07:00 - 08:00"),
-    (r"\b(?:8|08)\s*(?:am|baje|subah|morning)\b|\b08:00\b|\b8\s*to\s*9\s*am\b|\b8\s*am\b", "08:00 - 09:00"),
-    (r"\b(?:4|04)\s*(?:pm|baje|shaam|evening)\b|\b16:00\b|\b4\s*to\s*5\s*pm\b|\b4\s*pm\b", "16:00 - 17:00"),
-    (r"\b(?:5|05)\s*(?:pm|baje|shaam|evening)\b|\b17:00\b|\b5\s*to\s*6\s*pm\b|\b5\s*pm\b", "17:00 - 18:00"),
-    (r"\b(?:6|06)\s*(?:pm|baje|shaam|evening)\b|\b18:00\b|\b6\s*to\s*7\s*pm\b|\b6\s*pm\b", "18:00 - 19:00"),
-    (r"\b(?:7|07)\s*(?:pm|baje|shaam|evening)\b|\b19:00\b|\b7\s*to\s*8\s*pm\b|\b7\s*pm\b", "19:00 - 20:00"),
-    (r"\b(?:8|08)\s*(?:pm|baje|shaam|evening|night)\b|\b20:00\b|\b8\s*pm\b", "19:00 - 20:00"),
+    # 06:00 - 07:00
+    (r"\b(?:0?6:00\s*(?:-|to)\s*0?7:00)\b|\b(?:6|06)\s*(?:-|to)\s*(?:7|07)\s*am\b|\b(?:6|06)\s*(?:am|subah)\b|\b06:00\b|\b6\s*baje\s*subah\b|\bsubah\s*6\s*baje\b", "06:00 - 07:00"),
+    # 07:00 - 08:00
+    (r"\b(?:0?7:00\s*(?:-|to)\s*0?8:00)\b|\b(?:7|07)\s*(?:-|to)\s*(?:8|08)\s*am\b|\b(?:7|07)\s*(?:am|subah)\b|\b07:00\b|\b7\s*baje\s*subah\b|\bsubah\s*7\s*baje\b", "07:00 - 08:00"),
+    # 08:00 - 09:00
+    (r"\b(?:0?8:00\s*(?:-|to)\s*0?9:00)\b|\b(?:8|08)\s*(?:-|to)\s*(?:9|09)\s*(?:am|subah)?\b|\b(?:8|08)\s*(?:am|subah)\b|\b08:00\b|\b8\s*baje\s*subah\b|\bsubah\s*8\s*baje\b|\b8\s*to\s*9\b|\b8-9\b", "08:00 - 09:00"),
+    # 16:00 - 17:00 (4 PM - 5 PM)
+    (r"\b(?:16:00\s*(?:-|to)\s*17:00)\b|\b(?:4|04|16)\s*(?:-|to)\s*(?:5|05|17)\s*(?:pm|shaam|evening)?\b|\b(?:4|04)\s*(?:pm|shaam|evening)\b|\b16:00\b|\b4\s*baje\s*(?:shaam|pm)?\b|\bshaam\s*4\s*baje\b|\b4\s*to\s*5\b|\b4-5\b", "16:00 - 17:00"),
+    # 17:00 - 18:00 (5 PM - 6 PM)
+    (r"\b(?:17:00\s*(?:-|to)\s*18:00)\b|\b(?:5|05|17)\s*(?:-|to)\s*(?:6|06|18)\s*(?:pm|shaam|evening)?\b|\b(?:5|05)\s*(?:pm|shaam|evening)\b|\b17:00\b|\b5\s*baje\b|\bshaam\s*5\s*baje\b|\b5pm\b|\b5\s*pm\b|\b5\s*to\s*6\b|\b5-6\b", "17:00 - 18:00"),
+    # 18:00 - 19:00 (6 PM - 7 PM)
+    (r"\b(?:18:00\s*(?:-|to)\s*19:00)\b|\b(?:6|06|18)\s*(?:-|to)\s*(?:7|07|19)\s*(?:pm|shaam|evening)?\b|\b(?:6|06)\s*(?:pm|shaam|evening)\b|\b18:00\b|\b6\s*baje\s*(?:shaam|pm)?\b|\bshaam\s*6\s*baje\b|\b6pm\b|\b6\s*pm\b|\b6\s*to\s*7\b|\b6-7\b", "18:00 - 19:00"),
+    # 19:00 - 20:00 (7 PM - 8 PM)
+    (r"\b(?:19:00\s*(?:-|to)\s*20:00)\b|\b(?:7|07|19)\s*(?:-|to)\s*(?:8|08|20)\s*(?:pm|shaam|evening|night)?\b|\b(?:7|07)\s*(?:pm|shaam|evening)\b|\b19:00\b|\b7\s*baje\s*(?:shaam|pm)?\b|\bshaam\s*7\s*baje\b|\b7pm\b|\b7\s*pm\b|\b8\s*pm\b|\b8pm\b|\b20:00\b|\b7\s*to\s*8\b|\b7-8\b", "19:00 - 20:00"),
 ]
 
 def extract_sport(text: str, fallback_sport: Optional[str] = None) -> Optional[str]:
@@ -64,7 +77,7 @@ def extract_sport(text: str, fallback_sport: Optional[str] = None) -> Optional[s
 def extract_date_explicit(text: str) -> Optional[str]:
     low = text.lower()
     today = date.today()
-    if re.search(r"\b(?:aaj|today)\b", low):
+    if re.search(r"\b(?:aaj|today|tonight)\b", low):
         return today.isoformat()
     if re.search(r"\b(?:kal|tomorrow)\b", low):
         return (today + timedelta(days=1)).isoformat()
@@ -90,20 +103,36 @@ def extract_time_slot(text: str, fallback_slot: Optional[str] = None) -> Optiona
             return slot
     return fallback_slot
 
+def extract_ordinal_slot(text: str, available_slots: List[str]) -> Optional[str]:
+    if not available_slots:
+        return None
+    low = text.lower()
+    if re.search(r"\b(?:first|1st)\b", low) and len(available_slots) >= 1:
+        return available_slots[0]
+    if re.search(r"\b(?:second|2nd)\b", low) and len(available_slots) >= 2:
+        return available_slots[1]
+    if re.search(r"\b(?:third|3rd)\b", low) and len(available_slots) >= 3:
+        return available_slots[2]
+    if re.search(r"\b(?:fourth|4th)\b", low) and len(available_slots) >= 4:
+        return available_slots[3]
+    if re.search(r"\b(?:that\s+slot|this\s+slot|the\s+slot|it)\b", low) and len(available_slots) >= 1:
+        return available_slots[0]
+    return None
+
 def is_affirmation(text: str) -> bool:
     low = text.lower().strip()
     affirmative = [
         "yes", "haan", "ha", "haa", "kar do", "kardo", "confirm", "ok", "sure",
-        "yup", "yeah", "book it", "block it", "proceed", "done", "theek hai", "chalega", "yes please"
+        "yup", "yeah", "book it", "block it", "proceed", "done", "theek hai", "chalega", "yes please", "please do"
     ]
-    if low in ["y", "yes", "haan", "ha", "haa", "yes.", "haanji", "han", "ok", "confirm", "sure", "book it", "proceed"]:
+    if low in ["y", "yes", "haan", "ha", "haa", "yes.", "haanji", "han", "ok", "confirm", "sure", "book it", "proceed", "yes please", "please do"]:
         return True
     return any(re.search(rf"^(?:{re.escape(w)})$", low) for w in affirmative) or any(re.search(rf"\b{re.escape(w)}\b", low) for w in ["kar do", "kardo", "book it", "confirm it", "proceed"])
 
 def is_negation(text: str) -> bool:
     low = text.lower().strip()
-    negative = ["no", "nahi", "nahin", "mat karo", "cancel", "nope", "nevermind", "dont", "don't", "cancel action"]
-    if low in ["n", "no", "nahi", "nahin", "no.", "nope", "cancel", "mat karo"]:
+    negative = ["no", "nahi", "nahin", "mat karo", "cancel", "nope", "nevermind", "dont", "don't", "cancel action", "stop"]
+    if low in ["n", "no", "nahi", "nahin", "no.", "nope", "cancel", "mat karo", "stop"]:
         return True
     return any(re.search(rf"\b{re.escape(w)}\b", low) for w in negative)
 
@@ -146,7 +175,7 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
                 if user_role != "admin":
                     return QueryResponse(
                         intent="admin_command_denied",
-                        message="Permission Denied: You don't have permission to perform this action.",
+                        message="Permission Denied: You don't have permission to perform this action. Only administrators can block users.",
                         success=False
                     )
                 res = tools.block_user_tool(role=user_role, user_identifier=str(pending["target_id"]))
@@ -162,7 +191,7 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
                 if user_role != "admin":
                     return QueryResponse(
                         intent="admin_command_denied",
-                        message="Permission Denied: You don't have permission to perform this action.",
+                        message="Permission Denied: You don't have permission to perform this action. Only administrators can unblock users.",
                         success=False
                     )
                 res = tools.unblock_user_tool(role=user_role, user_identifier=str(pending["target_id"]))
@@ -186,7 +215,7 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
             # Safely disarm the pending action so subsequent turns do not accidentally trigger it.
             session["pending_action"] = None
 
-    # --- 2. USER IDENTITY QUERY ("Who am I logged in as?") ---
+    # --- 2. USER IDENTITY QUERY ("Who am I?", "What is my email?") ---
     identity_patterns = [
         r"\bwho\s+am\s+i\b",
         r"\bwho\s+am\s+i\s+logged\s+in\s+as\b",
@@ -199,6 +228,7 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
         r"\bmy\s+account\b",
         r"\buser\s+details\b",
         r"\bwho\s+is\s+logged\s+in\b",
+        r"\bwhat\s+(?:is\s+)?my\s+email\b",
         r"\bwhom\s+am\s+i\b"
     ]
     if any(re.search(pat, q) for pat in identity_patterns):
@@ -209,7 +239,7 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
             data={"name": user_name, "role": user_role, "email": user_email, "id": user_id}
         )
 
-    # --- 3. USER ROLE QUERY ("Am I a student or admin?", "Mera role kya hai?", "Which role do I have?") ---
+    # --- 3. USER ROLE QUERY ("Am I a student or admin?", "What is my role?") ---
     role_patterns = [
         r"\bmera\s+role\b",
         r"\bwhat\s+(?:is\s+)?my\s+role\b",
@@ -220,8 +250,7 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
         r"\bwhat\s+type\s+of\s+user\b",
         r"\bam\s+i\s+(?:a\s+|an\s+)?(?:student|admin)(?:\s+or\s+(?:a\s+|an\s+)?(?:student|admin))?\b",
         r"\bkya\s+main\s+(?:admin|student)\s+hoon\b",
-        r"\bwho\s+role\b",
-        r"\brole\b"
+        r"\bwho\s+role\b"
     ]
     if any(re.search(pat, q) for pat in role_patterns):
         return QueryResponse(
@@ -231,7 +260,7 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
             data={"role": user_role}
         )
 
-    # --- 4. CATALOG QUERY ("show catalog", "show my catalog", "sports catalog") ---
+    # --- 4. CATALOG & FACILITIES INFO QUERY ---
     if any(re.search(rf"\b{re.escape(k)}\b", q) for k in [
         "catalog", "show catalog", "show my catalog", "sports catalog", "facilities catalog",
         "view catalog", "list catalog", "all catalog", "sports and facilities"
@@ -246,7 +275,7 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
             f"🏅 **Campus Sports Catalog**:\n"
             f"• **Available Sports ({len(sports_list)}):** {sport_names}\n"
             f"• **Active Facilities ({len(fac_list)}):** {len(fac_list)} courts, fields & pools available on campus.\n"
-            f"You can explore full details in the Sports & Facilities tabs, or ask me *'Kal 5 PM badminton available hai?'* to check slots!"
+            f"You can explore full details in the Sports & Facilities tabs, or ask me *'Is Badminton available tomorrow at 5 PM?'* to check slots!"
         )
         return QueryResponse(
             intent="show_catalog",
@@ -353,7 +382,91 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
             data=res.get("data")
         )
 
-    # --- 6. QUERY: MY BOOKINGS (Read / View bookings) ---
+    # --- 6. CHECK FOR THIRD-PARTY BOOKING RESTRICTION ---
+    is_third_party_book = re.search(r"\bfor\s+(?:user\s+)?([a-zA-Z0-9_@.]+)\b", q)
+    non_user_entities = list(SPORTS_SYNONYMS.keys()) + [
+        "me", "myself", "my", "self", "own", "us", "student", "students", "admin",
+        "playing", "practice", "game", "match", "court", "courts", "facility", "facilities",
+        "today", "tomorrow", "kal", "aaj", "parso", "tonight", "hours", "hour", "slot", "slots",
+        user_name.lower()
+    ]
+    if is_third_party_book and any(k in q for k in ["book", "reserve", "slot"]):
+        target_name_entity = is_third_party_book.group(1).strip().lower()
+        if target_name_entity not in non_user_entities and not target_name_entity.isdigit():
+            if user_role != "admin":
+                return QueryResponse(
+                    intent="booking_on_behalf_denied",
+                    message="You can only create bookings for your own account. Students cannot book on behalf of other users.",
+                    success=False
+                )
+
+    # --- 7. ADMIN CAMPUS-WIDE BOOKINGS & ATTENDANCE OVERVIEW ---
+    admin_bookings_patterns = [
+        r"\b(?:show\s+|list\s+|view\s+)?(?:today'?s|todays|today|aaj\s+ki)\s+bookings?\b",
+        r"\b(?:show\s+|list\s+|view\s+)?all\s+(?:campus\s+)?bookings?\b",
+        r"\b(?:all\s+|campus\s+)bookings?\b",
+        r"\bfacility\s+bookings?\b",
+        r"\bshow\s+attendance\s+overview\b"
+    ]
+    if user_role == "admin" and any(re.search(pat, q) for pat in admin_bookings_patterns):
+        if "attendance" in q:
+            res = tools.get_dashboard_stats_tool()
+            return QueryResponse(
+                intent="get_dashboard_stats",
+                message=f"Campus Attendance Overview: Overall check-in attendance rate is {res.get('data', {}).get('attendance_rate', 0.0)}%.",
+                success=True,
+                data=res.get("data")
+            )
+        filter_d = date.today().isoformat() if any(k in q for k in ["today", "todays", "today's", "aaj"]) else None
+        res = tools.get_all_bookings_tool("admin", filter_date=filter_d)
+        return QueryResponse(
+            intent="get_all_bookings",
+            message=res["message"],
+            success=True,
+            data=res["data"]
+        )
+
+    # --- 8. ACTION: CANCEL BOOKING ---
+    is_cancel_action = (
+        any(re.search(pat, q) for pat in [
+            r"\bcancel\s+(?:my\s+|the\s+)?(?:latest\s+|next\s+|upcoming\s+|past\s+)?(?:booking|reservation|slot)\b",
+            r"\bcancel\s+(?:the\s+)?latest\s+one\b",
+            r"\bcancel\s+(?:booking\s+)?(?:id\s+)?#?\d+\b",
+            r"\bcancel\s+[a-zA-Z]+\s+booking\b",
+            r"\bbooking\s+cancel\b",
+            r"\bradd\s+kar\b",
+            r"\bhata\s+do\b"
+        ]) and not any(k in q for k in ["show", "list", "view", "dikhao", "batao", "history", "status"])
+    )
+
+    if is_cancel_action:
+        b_id = 0
+        m = re.search(r"\b(?:id|booking|#)\s*#?(\d+)\b", raw_query.lower())
+        if m:
+            b_id = int(m.group(1))
+        
+        sport = extract_sport(raw_query, None)
+        target_t = "next" if ("next" in q or "upcoming" in q) else "latest"
+        b_date = extract_date_explicit(raw_query) or ""
+        b_slot = extract_time_slot(raw_query) or ""
+        
+        res = tools.cancel_booking_tool(
+            user_id=user_id,
+            role=user_role,
+            sport_name=sport or "",
+            booking_id=b_id,
+            booking_date=b_date,
+            time_slot=b_slot,
+            target_type=target_t
+        )
+        return QueryResponse(
+            intent="cancel_booking",
+            message=f"✅ {res['message']}" if res["success"] else f"⚠️ {res['message']}",
+            success=res["success"],
+            data=res.get("data")
+        )
+
+    # --- 9. QUERY: VIEW BOOKINGS (Read / View bookings) ---
     is_view_bookings_query = (
         any(re.search(pat, q) for pat in [
             r"\b(?:meri|mera|my|all|active|upcoming|past|today's|todays|cancelled)\s+(?:active\s+|upcoming\s+|all\s+|cancelled\s+)?bookings?\b",
@@ -367,34 +480,14 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
             r"\bmy\s+schedule\b",
             r"\bbookings?\s+(?:kya\s+hain|kya\s+hai|dikhao|list|status|history)\b"
         ]) or
-        (any(k in q for k in ["booking", "bookings"]) and any(k in q for k in ["show", "list", "view", "dikhao", "batao", "kya hai", "kya hain", "status", "history", "active", "upcoming", "my all", "all my", "do i have", "have i", "any"]))
+        (any(k in q for k in ["booking", "bookings"]) and any(k in q for k in ["show", "list", "view", "dikhao", "batao", "status", "history", "active", "upcoming", "my all", "all my", "do i have", "have i", "any"]))
     )
-    is_cancel_action = (
-        any(re.search(pat, q) for pat in [
-            r"\bcancel\s+(?:my\s+|the\s+)?booking\b",
-            r"\bcancel\s+(?:my\s+)?(?:reservation|slot)\b",
-            r"\bcancel\s+(?:booking\s+)?(?:id\s+)?#?\d+\b",
-            r"\bbooking\s+cancel\b",
-            r"\bradd\s+kar\b",
-            r"\bhata\s+do\b"
-        ]) and not any(k in q for k in ["show", "list", "view", "dikhao", "batao", "history"])
-    )
-    is_direct_book_word = any(re.search(pat, q) for pat in [
-        r"\bbook\s+(?:kar\s+do|kardo|it|slot|now|for\s+me)\b",
-        r"\bkhelna\s+hai\b",
-        r"\breserve\b"
-    ])
 
-    # Admin querying all campus bookings
-    if user_role == "admin" and any(k in q for k in ["today's bookings", "today bookings", "all bookings", "all campus bookings", "facility bookings", "show all bookings", "show today's bookings"]):
-        filter_d = date.today().isoformat() if "today" in q else None
-        res = tools.get_all_bookings_tool("admin", filter_date=filter_d)
-        return QueryResponse(
-            intent="get_all_bookings",
-            message=res["message"],
-            success=True,
-            data=res["data"]
-        )
+    is_direct_book_word = any(re.search(pat, q) for pat in [
+        r"\bbook\b",
+        r"\breserve\b",
+        r"\bkhelna\s+hai\b"
+    ]) and not is_view_bookings_query and not is_cancel_action
 
     if is_view_bookings_query and not is_cancel_action and not is_direct_book_word:
         filter_type = "all"
@@ -415,13 +508,23 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
             data=res["data"]
         )
 
-    # --- 7. QUERY: MY ATTENDANCE ---
-    if any(k in q for k in ["attendance", "meri attendance", "show my attendance", "kitne attendance", "check in records", "attendance percentage", "attended", "missed"]):
-        if user_role == "admin" and ("overview" in q or "all" in q or "system" in q):
+    # --- 10. QUERY: ATTENDANCE ---
+    attendance_patterns = [
+        r"\b(?:show\s+|view\s+|get\s+|check\s+|meri\s+)?attendance\b",
+        r"\bmeri\s+attendance\b",
+        r"\battendance\s+(?:percentage|rate|summary|history|dikhao|batao|kitni\s+hai|kya\s+hai)\b",
+        r"\b(?:how\s+many\s+)?sessions?\s+(?:have\s+i\s+)?(?:attended|missed)\b",
+        r"\bhow\s+much\s+is\s+my\s+attendance\b",
+        r"\bcheck\s*in\s*records?\b",
+        r"\battended\b",
+        r"\bmissed\s+sessions?\b"
+    ]
+    if any(re.search(pat, q) for pat in attendance_patterns) or any(k in q for k in ["attendance", "meri attendance"]):
+        if user_role == "admin" and ("overview" in q or "all" in q or "system" in q or "campus" in q):
             res = tools.get_dashboard_stats_tool()
             return QueryResponse(
                 intent="get_dashboard_stats",
-                message=f"Campus Attendance Overview: Overall check-in attendance rate is {res.get('data', {}).get('attendance_rate', 100)}%.",
+                message=f"Campus Attendance Overview: Overall check-in attendance rate is {res.get('data', {}).get('attendance_rate', 0.0)}%.",
                 success=True,
                 data=res.get("data")
             )
@@ -434,7 +537,7 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
             data=res["data"]
         )
 
-    # --- 8. QUERY: LIST ALL USERS / USER DIRECTORY (Strictly Admin only) ---
+    # --- 11. QUERY: LIST ALL USERS / USER DIRECTORY (Strictly Admin only) ---
     if any(k in q for k in ["show all users", "list all users", "show users", "list users", "all users", "show blocked users", "show student users", "how many users", "total users", "users kitne"]):
         if user_role != "admin":
             return QueryResponse(
@@ -459,8 +562,8 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
             data=res["data"]
         )
 
-    # --- 9. QUERY: LIST SPORTS / LIST FACILITIES ---
-    if any(k in q for k in ["list sports", "available sports", "kaun kaun se sports", "what sports", "sports dikhao", "what sports are available"]):
+    # --- 12. QUERY: LIST SPORTS / LIST FACILITIES ---
+    if any(k in q for k in ["list sports", "available sports", "kaun kaun se sports", "what sports", "sports dikhao", "what sports are available", "show available sports", "what sports can i play"]):
         res = tools.list_sports_tool()
         return QueryResponse(
             intent="list_sports",
@@ -469,7 +572,7 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
             data=res["data"]
         )
 
-    if any(k in q for k in ["what facilities are available", "which facilities are available", "facilities", "courts", "grounds", "kaunse courts", "free courts", "available facilities", "show facilities"]):
+    if any(k in q for k in ["what facilities are available", "which facilities are available", "facilities", "courts", "grounds", "which courts are available", "kaunse courts", "free courts", "available facilities", "show facilities", "which facility is used"]):
         sport = extract_sport(raw_query)
         res = tools.list_facilities_tool(sport or "")
         return QueryResponse(
@@ -479,8 +582,8 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
             data=res["data"]
         )
 
-    # --- 10. QUERY: OVERVIEW / STATS ---
-    if any(k in q for k in ["overview", "dashboard", "summary", "stats", "statistics", "report"]):
+    # --- 13. QUERY: OVERVIEW / STATS ---
+    if any(k in q for k in ["overview", "dashboard", "summary", "stats", "statistics", "report", "sports erp overview"]):
         res = tools.get_dashboard_stats_tool()
         return QueryResponse(
             intent="get_dashboard_stats",
@@ -489,82 +592,87 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
             data=res["data"]
         )
 
-    # --- 11. ACTION: CANCEL BOOKING ---
-    if any(k in q for k in ["cancel my booking", "cancel booking", "booking cancel kar", "booking cancel karo", "cancel reservation", "cancel latest booking", "meri latest booking cancel", "meri booking cancel"]):
-        # Extract ID if present
-        b_id_match = re.search(r"\b(?:id|booking|reservation)?\s*#?(\d+)\b", raw_query.lower())
-        b_id = 0
-        if "id" in raw_query.lower() or "#" in raw_query or "booking " in raw_query.lower():
-            m = re.search(r"\b(?:id|booking|#)\s*#?(\d+)\b", raw_query.lower())
-            if m:
-                b_id = int(m.group(1))
-        
-        sport = extract_sport(raw_query, session["last_entities"].get("sport"))
-        res = tools.cancel_booking_tool(user_id=user_id, role=user_role, sport_name=sport or "", booking_id=b_id)
-        return QueryResponse(
-            intent="cancel_booking",
-            message=f"✅ {res['message']}" if res["success"] else f"⚠️ {res['message']}",
-            success=res["success"],
-            data=res.get("data")
-        )
-
-    # --- 12. ACTION: BOOKING & AVAILABILITY FLOW ---
-    # Distinguish between explicit booking action and read-only availability inquiry
-    is_explicit_book_action = any(re.search(pat, q) for pat in [
-        r"\bbook\s+(?:kar\s+do|kardo|it|slot|now|for\s+me)\b",
-        r"\bbook\s+[a-zA-Z]+\b", # e.g. "book badminton"
-        r"\bbook\s+slot\b",
-        r"\bkhelna\s+hai\b",
-        r"\breserve\b",
-        r"\bslot\s+chahiye\b",
-        r"\bslot\s+book\b"
-    ])
+    # --- 14. ACTION: BOOKING & AVAILABILITY FLOW ---
+    is_explicit_book_action = (
+        any(re.search(pat, q) for pat in [
+            r"\bbook\b",
+            r"\breserve\b",
+            r"\bkhelna\s+hai\b",
+            r"\bslot\s+chahiye\b",
+            r"\bslot\s+book\b",
+            r"\bbook\s+(?:a\s+)?court\b",
+            r"\bfind\s+(?:an\s+)?available\s+slot\s+and\s+book\b"
+        ]) and not is_view_bookings_query and not is_cancel_action
+    )
     
-    is_avail_query = any(k in q for k in [
-        "available", "free", "khali", "slots batao", "check availability",
-        "which slots", "available hai", "free hai", "khali hai", "slot available", "koi available slot"
+    is_avail_query = any(re.search(pat, q) for pat in [
+        r"\bavailable\b",
+        r"\bfree\b",
+        r"\bkhali\b",
+        r"\bslots?\s+batao\b",
+        r"\bcheck\s+availability\b",
+        r"\bwhich\s+slots?\b",
+        r"\bavailable\s+hai\b",
+        r"\bfree\s+hai\b",
+        r"\bkhali\s+hai\b",
+        r"\bslot\s+available\b",
+        r"\bkoi\s+available\s+slot\b",
+        r"\bavailable\s+slots?\b",
+        r"\bis\s+[a-zA-Z0-9_]+\s+available\b"
     ])
     
     sport_in_query = extract_sport(raw_query, None)
     slot_in_query = extract_time_slot(raw_query, None)
+    ordinal_slot = extract_ordinal_slot(raw_query, session["last_entities"].get("available_slots", []))
+    resolved_slot_in_q = slot_in_query or ordinal_slot
     date_in_query = extract_date_explicit(raw_query)
 
-    should_run_booking_or_avail = is_explicit_book_action or is_avail_query or (sport_in_query and slot_in_query)
+    should_run_booking_or_avail = (
+        is_explicit_book_action or
+        is_avail_query or
+        (sport_in_query and resolved_slot_in_q) or
+        (resolved_slot_in_q and session["last_entities"].get("sport")) or
+        (is_explicit_book_action and session["last_entities"].get("sport"))
+    )
 
     if should_run_booking_or_avail:
         detected_sport = sport_in_query or session["last_entities"].get("sport")
         detected_date = date_in_query or session["last_entities"].get("date") or (date.today() + timedelta(days=1)).isoformat()
-        detected_slot = slot_in_query or session["last_entities"].get("time_slot")
+        
+        if is_avail_query or (not is_explicit_book_action and not resolved_slot_in_q):
+            detected_slot = resolved_slot_in_q
+        else:
+            detected_slot = resolved_slot_in_q or session["last_entities"].get("time_slot")
 
         if not detected_sport:
             return QueryResponse(
                 intent="missing_sport",
-                message="Kaunsa sport book ya check karna chahte hain? (e.g. Badminton, Cricket, Football, Basketball, Swimming, Table Tennis)",
+                message="Which sport would you like to check or book? (e.g. Badminton, Cricket, Football, Basketball, Swimming, Table Tennis)",
                 success=True
             )
         
         session["last_entities"]["sport"] = detected_sport
         session["last_entities"]["date"] = detected_date
-        if detected_slot:
-            session["last_entities"]["time_slot"] = detected_slot
+        session["last_entities"]["time_slot"] = detected_slot
 
-        # Case A: Slot is not specified -> list all available slots
+        # Case A: Slot is not specified -> list all available slots from real SQLite DB
         if not detected_slot:
             alt = tools.find_alternative_slots(detected_sport, detected_date)
             slots = alt.get("available_slots", [])
-            slot_str = ", ".join(slots[:4]) if slots else "No slots open"
+            session["last_entities"]["available_slots"] = slots
+            slot_str = ", ".join(slots) if slots else "No slots open"
             
             if is_explicit_book_action:
                 return QueryResponse(
                     intent="check_available_slots",
-                    message=f"{detected_sport} ke liye {detected_date} ko ye slots available hain: {slot_str}. Kaunsa slot book karein?",
+                    message=f"For {detected_sport} on {detected_date}, available slots are: {slot_str}. Which slot would you like to book?",
                     success=True,
                     suggested_slots=slots
                 )
             else:
                 return QueryResponse(
                     intent="check_available_slots",
-                    message=f"Kal {detected_sport} ke available slots: {slot_str}. Agar aap chahein to main inme se koi slot book kar sakta hoon.",
+                    message=f"Available slots for {detected_sport} on {detected_date}: {slot_str}. If you would like to book any slot, just say 'Book <slot>'.",
                     success=True,
                     pending_confirmation=False,
                     suggested_slots=slots
@@ -584,7 +692,7 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
                     "booking_date": detected_date,
                     "time_slot": detected_slot
                 }
-                msg = f"{fac_name} ({detected_sport}) {detected_date} ko {detected_slot} available hai. Booking confirm kar du?"
+                msg = f"{fac_name} ({detected_sport}) is available on {detected_date} from {detected_slot}. Shall I confirm this booking?"
                 return QueryResponse(
                     intent="confirm_booking_request",
                     message=msg,
@@ -594,7 +702,7 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
                 )
             else:
                 # User just asked for availability -> Inform only, do NOT arm confirmation
-                msg = f"✅ {fac_name} ({detected_sport}) {detected_date} ko {detected_slot} available hai. Agar aap book karna chahte hain to 'Book it' ya 'Confirm' bole."
+                msg = f"✅ {fac_name} ({detected_sport}) is available on {detected_date} at {detected_slot}. If you would like to book it, please say 'Yes' or 'Book it'."
                 return QueryResponse(
                     intent="check_slot_availability",
                     message=msg,
@@ -604,11 +712,12 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
                 )
         else:
             alt_slots = avail.get("alternative_slots", [])
+            session["last_entities"]["available_slots"] = alt_slots
             if alt_slots:
-                slot_str = ", ".join(alt_slots[:3])
-                msg = f"{detected_slot} par {detected_sport} already booked hai {detected_date} ko. Mujhe ye alternative slots mile: {slot_str}. Kaunsa time pasand karenge?"
+                slot_str = ", ".join(alt_slots)
+                msg = f"{detected_sport} is unavailable at {detected_slot} on {detected_date}. Available alternatives are: {slot_str}. Which one would you prefer?"
             else:
-                msg = f"{detected_date} ko {detected_sport} ke liye koi slot available nahi hai."
+                msg = f"No alternative slots are currently available for {detected_sport} on {detected_date}."
             
             return QueryResponse(
                 intent="slot_conflict_alternatives",
@@ -617,11 +726,11 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
                 suggested_slots=alt_slots
             )
 
-    # --- 13. GEMINI FUNCTION CALLING / FALLBACK ---
+    # --- 15. GEMINI FUNCTION CALLING / FALLBACK ---
     return handle_gemini_or_smart_fallback(raw_query, current_user, session)
 
 def handle_gemini_or_smart_fallback(query: str, current_user: Dict[str, Any], session: Dict[str, Any]) -> QueryResponse:
-    """Invokes Gemini LLM if key is configured, or provides context-aware campus answers."""
+    """Invokes Gemini LLM if key is configured, or provides context-aware campus answers in English."""
     user_name = current_user.get("name", "User")
     user_role = current_user.get("role", "student")
 
@@ -631,7 +740,7 @@ def handle_gemini_or_smart_fallback(query: str, current_user: Dict[str, Any], se
             system_prompt = (
                 f"You are the Campus Sports ERP AI Assistant. Logged in user: {user_name} (Role: {user_role}). "
                 "Help with facility information, campus sports rules, booking guidance, and query interpretation. "
-                "Keep responses polite, natural, and helpful in English or Hinglish as requested."
+                "Always respond in professional English."
             )
             payload = {
                 "contents": [
@@ -663,23 +772,10 @@ def handle_gemini_or_smart_fallback(query: str, current_user: Dict[str, Any], se
             "3. Timing: Facilities remain open from 06:00 AM to 09:00 PM daily.\n"
             "4. Check-in: Please mark attendance at the sports desk upon arrival."
         )
-    elif "help" in q or "madad" in q or "kya kar sakte ho" in q:
-        msg = (
-            f"Hello {user_name}! Main aapka Sports ERP AI Assistant hoon. Aap mujhse pooch sakte hain:\n"
-            "• 'Kal 5 PM badminton book kar do'\n"
-            "• 'Meri active bookings kya hain?'\n"
-            "• 'Who am I logged in as?'\n"
-            "• 'Am I a student or admin?'\n"
-            "• 'Show catalog'\n"
-            "• 'Badminton ka koi available slot kal batao'\n"
-            "• 'Mere kitne attendance hain?'\n"
-            "• 'Show overview'\n"
-            + ("• 'Rahul ko block kar do' (Admin only)\n" if user_role == "admin" else "")
-        )
     else:
         msg = (
-            f"Hello {user_name}! Main aapki sports booking aur campus facilities mein madad kar sakta hoon. "
-            "Aap 'Kal 5 PM badminton book kar do', 'Meri bookings dikhao', 'Who am I logged in as?', ya 'Show catalog' try kar sakte hain."
+            "I can help you with bookings, availability, attendance, sports, facilities, and other Sports ERP tasks. "
+            "Please tell me what you would like to do (e.g. 'Show my bookings', 'Book a badminton slot tomorrow at 5 PM', 'Show my attendance', or 'What sports are available?')."
         )
 
     return QueryResponse(

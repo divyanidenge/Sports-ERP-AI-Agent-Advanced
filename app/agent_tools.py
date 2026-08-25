@@ -118,10 +118,10 @@ def get_user_attendance_tool(user_id: int, sport_name: str = "") -> Dict[str, An
     absent_count = len([r for r in rows if r["status"] == "absent"])
     late_count = len([r for r in rows if r["status"] == "late"])
     
-    rate = round((present_count / total_sessions * 100) if total_sessions > 0 else 100.0, 1)
+    rate = round((present_count / total_sessions * 100) if total_sessions > 0 else 0.0, 1)
     
     if total_sessions == 0:
-        msg = f"You have no attendance records logged yet{' for ' + sport_name if sport_name else ''}."
+        msg = f"You have no attendance records logged yet{' for ' + sport_name if sport_name else ''}. Your attendance rate is 0.0% across 0 sessions."
     else:
         msg = (
             f"Attendance Summary{' for ' + sport_name if sport_name else ''}: "
@@ -295,8 +295,8 @@ def create_booking_tool(user_id: int, sport_name: str, booking_date: str, time_s
             "data": None
         }
 
-def cancel_booking_tool(user_id: int, role: str, sport_name: str = "", booking_id: int = 0) -> Dict[str, Any]:
-    """Cancels a booking by ID or by matching the user's latest booking for a sport."""
+def cancel_booking_tool(user_id: int, role: str, sport_name: str = "", booking_id: int = 0, booking_date: str = "", time_slot: str = "", target_type: str = "latest") -> Dict[str, Any]:
+    """Cancels a booking by ID or by matching the user's booking for a sport, date, or time slot."""
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -304,6 +304,12 @@ def cancel_booking_tool(user_id: int, role: str, sport_name: str = "", booking_i
     if booking_id > 0:
         cursor.execute("SELECT id, user_id, status FROM bookings WHERE id = ?", (booking_id,))
         target_booking = cursor.fetchone()
+        if target_booking and role != "admin" and target_booking["user_id"] != user_id:
+            conn.close()
+            return {
+                "success": False,
+                "message": "Access Denied: You can only cancel your own bookings."
+            }
     else:
         query = """
             SELECT b.id, b.user_id, b.status, s.name as sport_name, b.booking_date, b.time_slot
@@ -318,7 +324,20 @@ def cancel_booking_tool(user_id: int, role: str, sport_name: str = "", booking_i
         if sport_name:
             query += " AND LOWER(s.name) LIKE ?"
             params.append(f"%{sport_name.lower().strip()}%")
-        query += " ORDER BY b.id DESC LIMIT 1"
+        if booking_date:
+            query += " AND b.booking_date = ?"
+            params.append(booking_date)
+        if time_slot:
+            query += " AND b.time_slot = ?"
+            params.append(time_slot)
+        
+        if target_type == "next":
+            today_str = date.today().isoformat()
+            query += " AND b.booking_date >= ? ORDER BY b.booking_date ASC, b.time_slot ASC LIMIT 1"
+            params.append(today_str)
+        else:
+            query += " ORDER BY b.id DESC LIMIT 1"
+
         cursor.execute(query, tuple(params))
         target_booking = cursor.fetchone()
     

@@ -1,7 +1,16 @@
 import streamlit as st
 import pandas as pd
 import uuid
+import os
+import sys
+from pathlib import Path
 from datetime import date, timedelta
+
+# Ensure frontend directory is in sys.path
+FRONTEND_DIR = Path(__file__).resolve().parent
+if str(FRONTEND_DIR) not in sys.path:
+    sys.path.insert(0, str(FRONTEND_DIR))
+
 import api_client as api
 
 # Page configuration
@@ -81,7 +90,7 @@ if "chat_messages" not in st.session_state:
     st.session_state["chat_messages"] = [
         {
             "role": "assistant",
-            "content": "👋 Hello! I am your AI Sports ERP Agent. You can talk to me naturally in Hindi or English (e.g. *'Kal 5 PM badminton book kar do'*, *'Meri bookings dikhao'*, *'Aaj kaunse courts free hain?'*).",
+            "content": "👋 Hello! I am your AI Sports ERP Assistant. How can I help you today? (e.g. *'Show my bookings'*, *'Book a badminton slot tomorrow at 5 PM'*, *'Show my attendance'*, *'What sports are available?'*).",
             "data": None
         }
     ]
@@ -211,7 +220,7 @@ def render_dashboard():
         
         attended_count = len([a for a in my_attendance if a["status"] == "present"])
         total_sessions = len(my_attendance)
-        att_rate = round((attended_count / total_sessions * 100) if total_sessions > 0 else 100.0, 1)
+        att_rate = round((attended_count / total_sessions * 100) if total_sessions > 0 else 0.0, 1)
 
         c1, c2, c3, c4 = st.columns(4)
         with c1:
@@ -608,7 +617,7 @@ def render_attendance():
             present = len([r for r in records if r["status"] == "present"])
             absent = len([r for r in records if r["status"] == "absent"])
             late = len([r for r in records if r["status"] == "late"])
-            rate = round((present / total * 100) if total > 0 else 100.0, 1)
+            rate = round((present / total * 100) if total > 0 else 0.0, 1)
 
             c1, c2, c3, c4 = st.columns(4)
             with c1:

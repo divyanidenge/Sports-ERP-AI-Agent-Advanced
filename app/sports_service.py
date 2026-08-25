@@ -313,7 +313,7 @@ def get_dashboard_overview() -> DashboardStats:
     cursor.execute("SELECT COUNT(*) as count FROM attendance WHERE status = 'present'")
     present_count = cursor.fetchone()["count"]
     
-    attendance_rate = round((present_count / total_bookings * 100) if total_bookings > 0 else 100.0, 1)
+    attendance_rate = round((present_count / total_bookings * 100) if total_bookings > 0 else 0.0, 1)
     
     cursor.execute("""
         SELECT b.id, u.name as user_name, f.name as facility_name, s.name as sport_name,
