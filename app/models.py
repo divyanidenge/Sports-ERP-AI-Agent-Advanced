@@ -67,6 +67,7 @@ class BookingCreate(BaseModel):
     booking_date: str # YYYY-MM-DD
     time_slot: str    # e.g., '06:00 - 07:00'
     notes: Optional[str] = ""
+    idempotency_key: Optional[str] = None
 
 class BookingResponse(BaseModel):
     id: int
@@ -81,6 +82,7 @@ class BookingResponse(BaseModel):
     time_slot: str
     status: str
     notes: Optional[str] = None
+    idempotency_key: Optional[str] = None
     created_at: Optional[str] = None
 
 # --- Attendance Models ---
@@ -103,7 +105,7 @@ class AttendanceResponse(BaseModel):
     facility_name: Optional[str] = None
     sport_name: Optional[str] = None
 
-# --- Dashboard Models ---
+# --- Dashboard & Analytics Models ---
 class DashboardStats(BaseModel):
     total_users: int
     active_students: int
@@ -113,6 +115,31 @@ class DashboardStats(BaseModel):
     today_bookings: int
     attendance_rate: float
     recent_bookings: List[Dict[str, Any]]
+
+class AdvancedAnalytics(BaseModel):
+    total_bookings: int
+    active_confirmed_bookings: int
+    cancelled_bookings: int
+    cancellation_rate: float
+    total_attendance_records: int
+    attendance_present_rate: float
+    facility_utilization_rate: float
+    popular_sports: List[Dict[str, Any]]
+    peak_hours_distribution: List[Dict[str, Any]]
+    facility_breakdown: List[Dict[str, Any]]
+
+# --- Audit Log Models ---
+class AuditLogResponse(BaseModel):
+    id: int
+    user_id: Optional[int] = None
+    user_email: Optional[str] = None
+    action: str
+    resource_type: Optional[str] = None
+    resource_id: Optional[int] = None
+    details: Optional[str] = None
+    status: str
+    ip_address: Optional[str] = None
+    created_at: Optional[str] = None
 
 # --- AI Assistant Query Models ---
 class QueryRequest(BaseModel):

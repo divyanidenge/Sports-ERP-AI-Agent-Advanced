@@ -20,9 +20,9 @@ def test_multiturn_context_inheritance_and_booking():
     assert session["last_entities"]["sport"] == "Badminton"
 
     # Turn 2
-    resp2 = process_query("Book 08:00 - 09:00", student_user, session_id=session_id)
+    resp2 = process_query("Book 06:00 - 07:00", student_user, session_id=session_id)
     assert resp2.pending_confirmation is True
-    assert "08:00 - 09:00" in resp2.message
+    assert "06:00 - 07:00" in resp2.message
     assert session["pending_action"] is not None
 
     # Turn 3

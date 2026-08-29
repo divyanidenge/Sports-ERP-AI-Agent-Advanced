@@ -80,20 +80,25 @@ if "token" not in st.session_state:
     st.session_state["token"] = None
 if "user" not in st.session_state:
     st.session_state["user"] = None
-if "session_id" not in st.session_state:
-    st.session_state["session_id"] = str(uuid.uuid4())
 if "pending_confirmation" not in st.session_state:
     st.session_state["pending_confirmation"] = False
 if "suggested_slots" not in st.session_state:
     st.session_state["suggested_slots"] = []
-if "chat_messages" not in st.session_state:
-    st.session_state["chat_messages"] = [
-        {
-            "role": "assistant",
-            "content": "👋 Hello! I am your AI Sports ERP Assistant. How can I help you today? (e.g. *'Show my bookings'*, *'Book a badminton slot tomorrow at 5 PM'*, *'Show my attendance'*, *'What sports are available?'*).",
-            "data": None
-        }
-    ]
+
+def get_user_chat_history(user: dict) -> list:
+    """Returns the isolated chat history for the currently logged-in user."""
+    if not user:
+        return []
+    key = f"chat_messages_user_{user['id']}"
+    if key not in st.session_state:
+        st.session_state[key] = [
+            {
+                "role": "assistant",
+                "content": f"👋 Hello {user['name']}! I am your AI Sports ERP Assistant. How can I help you today? (e.g. *'Show my bookings'*, *'Book a badminton slot tomorrow at 5 PM'*, *'Show my attendance'*, *'What sports are available?'*).",
+                "data": None
+            }
+        ]
+    return st.session_state[key]
 
 # Authentication Screen
 def render_auth():
@@ -126,15 +131,26 @@ def render_auth():
                             data = resp.json()
                             st.session_state["token"] = data["access_token"]
                             st.session_state["user"] = data["user"]
-                            st.session_state["session_id"] = str(uuid.uuid4())
+                            user_id = data["user"]["id"]
+                            st.session_state[f"session_token_{user_id}"] = str(uuid.uuid4())
                             st.success(f"Welcome back, {data['user']['name']}!")
                             st.rerun()
                         elif resp.status_code == 403:
-                            st.error(f"⛔ {resp.json().get('detail', 'Your account is blocked.')}")
+                            err_msg = "Your account is blocked by administrator."
+                            try:
+                                err_msg = resp.json().get("detail", err_msg)
+                            except Exception:
+                                pass
+                            st.error(f"⛔ {err_msg}")
                         else:
-                            st.error(f"❌ {resp.json().get('detail', 'Login failed.')}")
+                            err_msg = "Login failed."
+                            try:
+                                err_msg = resp.json().get("detail", resp.text)
+                            except Exception:
+                                pass
+                            st.error(f"❌ {err_msg}")
                     except Exception as e:
-                        st.error(f"Connection error: Could not reach backend server at {api.API_BASE_URL}.")
+                        st.error(f"Connection error: Could not reach backend server at {api.API_BASE_URL} ({e}).")
 
         with tab_register:
             st.subheader("Register New Account")
@@ -191,6 +207,9 @@ def render_sidebar():
         st.divider()
 
         if st.button("🚪 Log Out", use_container_width=True):
+            # Clear all session keys for complete security and privacy isolation
+            for k in list(st.session_state.keys()):
+                del st.session_state[k]
             st.session_state["token"] = None
             st.session_state["user"] = None
             st.session_state["pending_confirmation"] = False
@@ -728,7 +747,15 @@ def render_ai_assistant():
     clicked_prompt = None
     token = st.session_state["token"]
     user = st.session_state["user"]
-    session_id = st.session_state["session_id"]
+    user_id = user["id"]
+    
+    # Ensure user-scoped backend session token exists
+    if f"session_token_{user_id}" not in st.session_state:
+        st.session_state[f"session_token_{user_id}"] = str(uuid.uuid4())
+    session_id = f"user_{user_id}_{st.session_state[f'session_token_{user_id}']}"
+
+    # Retrieve user-scoped isolated chat messages
+    messages = get_user_chat_history(user)
 
     col_title, col_clear = st.columns([4, 1])
     with col_title:
@@ -736,15 +763,16 @@ def render_ai_assistant():
         st.markdown("<div class='sub-header'>Natural language sports booking, cancellation, attendance & queries</div>", unsafe_allow_html=True)
     with col_clear:
         st.write("")
-        if st.button("🗑️ Clear Chat", use_container_width=True, help="Clear conversation history"):
-            st.session_state["chat_messages"] = [
+        if st.button("🗑️ Clear Chat", use_container_width=True, help="Clear your conversation history"):
+            # Reset only current user's chat history
+            st.session_state[f"chat_messages_user_{user_id}"] = [
                 {
                     "role": "assistant",
                     "content": f"👋 Hello {user['name']}! I am your AI Sports Assistant. How can I help you today? (e.g. *'Show my bookings'*, *'Book badminton tomorrow at 5 PM'*, *'Show my attendance'*, *'What sports are available?'*)",
                     "data": None
                 }
             ]
-            st.session_state["session_id"] = str(uuid.uuid4())
+            st.session_state[f"session_token_{user_id}"] = str(uuid.uuid4())
             st.session_state["pending_confirmation"] = False
             st.session_state["suggested_slots"] = []
             st.rerun()
@@ -752,7 +780,7 @@ def render_ai_assistant():
     st.divider()
 
     # Render Chat History
-    for msg in st.session_state["chat_messages"]:
+    for msg in messages:
         avatar = "🤖" if msg["role"] == "assistant" else "👤"
         with st.chat_message(msg["role"], avatar=avatar):
             st.write(msg["content"])
@@ -788,8 +816,8 @@ def render_ai_assistant():
     prompt_to_send = clicked_prompt or user_input
 
     if prompt_to_send:
-        # Add user message
-        st.session_state["chat_messages"].append({"role": "user", "content": prompt_to_send, "data": None})
+        # Add user message to user's isolated chat history
+        messages.append({"role": "user", "content": prompt_to_send, "data": None})
         with st.chat_message("user", avatar="👤"):
             st.write(prompt_to_send)
 
@@ -799,7 +827,11 @@ def render_ai_assistant():
                 try:
                     resp = api.api_ask_agent(token, prompt_to_send, session_id=session_id)
                     if resp.status_code == 200:
-                        res_data = resp.json()
+                        try:
+                            res_data = resp.json()
+                        except Exception:
+                            res_data = {"message": resp.text, "success": True, "data": None}
+                        
                         reply_msg = res_data.get("message", "Request completed.")
                         payload = res_data.get("data")
                         st.session_state["pending_confirmation"] = res_data.get("pending_confirmation", False)
@@ -813,24 +845,30 @@ def render_ai_assistant():
                                 clean_payload = {k: v for k, v in payload.items() if k not in ["recent_bookings", "hashed_password"]}
                                 st.json(clean_payload)
 
-                        st.session_state["chat_messages"].append({
+                        messages.append({
                             "role": "assistant",
                             "content": reply_msg,
                             "data": payload
                         })
                         st.rerun()
                     else:
-                        err = resp.json().get("detail", "Error processing request")
-                        st.error(f"Error: {err}")
-                        st.session_state["chat_messages"].append({
+                        err_text = ""
+                        try:
+                            err_text = resp.json().get("detail", resp.text)
+                        except Exception:
+                            err_text = resp.text or f"HTTP status {resp.status_code}"
+                        
+                        err_msg = f"Backend Error (HTTP {resp.status_code}): {err_text}"
+                        st.error(err_msg)
+                        messages.append({
                             "role": "assistant",
-                            "content": f"⚠️ Error: {err}",
+                            "content": f"⚠️ {err_msg}",
                             "data": None
                         })
                 except Exception as e:
-                    err_msg = f"Could not communicate with backend: {e}"
+                    err_msg = f"Could not communicate with backend server at {api.API_BASE_URL}: {e}"
                     st.error(err_msg)
-                    st.session_state["chat_messages"].append({
+                    messages.append({
                         "role": "assistant",
                         "content": f"⚠️ {err_msg}",
                         "data": None

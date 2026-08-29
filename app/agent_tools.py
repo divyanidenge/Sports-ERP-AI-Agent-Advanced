@@ -17,7 +17,7 @@ ALL_STANDARD_SLOTS = [
 ]
 
 def search_my_bookings(user_id: int, filter_type: str = "all") -> Dict[str, Any]:
-    """Retrieves bookings for the logged-in student with optional filtering (all, active, today, upcoming, cancelled, next)."""
+    """Retrieves bookings strictly for the authenticated student with optional filtering (all, active, today, upcoming, cancelled, next)."""
     bookings = sports_service.list_user_bookings(user_id)
     data = [b.model_dump() for b in bookings]
     today_str = date.today().isoformat()
@@ -86,7 +86,7 @@ def search_my_bookings(user_id: int, filter_type: str = "all") -> Dict[str, Any]
         "success": True,
         "count": count,
         "active_count": active_count,
-        "message": f"Found {count} {msg_prefix} booking(s).",
+        "message": f"Found {count} {msg_prefix} booking(s) for your account.",
         "data": filtered_data
     }
 
@@ -172,6 +172,21 @@ def check_availability(sport_name: str, booking_date: str, time_slot: str) -> Di
             "data": None
         }
 
+    # Check if requested slot is part of campus operating slots
+    if time_slot not in ALL_STANDARD_SLOTS:
+        conn.close()
+        alt = find_alternative_slots(matched_sport_name, booking_date, time_slot)
+        return {
+            "success": True,
+            "available": False,
+            "sport_id": sport_id,
+            "sport_name": matched_sport_name,
+            "booking_date": booking_date,
+            "time_slot": time_slot,
+            "message": f"{matched_sport_name} is unavailable at {time_slot} on {booking_date}.",
+            "alternative_slots": alt.get("available_slots", [])
+        }
+
     # Find free facility
     available_facilities = []
     for fac in facilities:
@@ -213,7 +228,7 @@ def check_availability(sport_name: str, booking_date: str, time_slot: str) -> Di
         }
 
 def find_alternative_slots(sport_name: str, booking_date: str, requested_slot: Optional[str] = None) -> Dict[str, Any]:
-    """Finds all available time slots for a given sport on a specific date."""
+    """Finds all available time slots for a given sport on a specific date, ranked by proximity to requested time."""
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -231,26 +246,35 @@ def find_alternative_slots(sport_name: str, booking_date: str, requested_slot: O
         return {"success": False, "available_slots": [], "message": f"No active facilities for {sport_row['name']}."}
 
     free_slots = []
+    slot_capacities = {}
     for slot in ALL_STANDARD_SLOTS:
         if requested_slot and slot == requested_slot:
             continue
-        # Check if at least one facility is free for this slot
+        # Count free facilities for this slot
+        free_count = 0
         for fac in facilities:
             cursor.execute(
                 "SELECT id FROM bookings WHERE facility_id = ? AND booking_date = ? AND time_slot = ? AND status = 'confirmed'",
                 (fac["id"], booking_date, slot)
             )
             if not cursor.fetchone():
-                free_slots.append(slot)
-                break
+                free_count += 1
+        
+        if free_count > 0:
+            free_slots.append(slot)
+            slot_capacities[slot] = free_count
 
     conn.close()
+    
+    # Rank available slots: closest to requested hour first, then higher capacity, then chronological
+    ranked_slots = sports_service.rank_slots_by_proximity(free_slots, requested_slot=requested_slot, slot_capacities=slot_capacities)
+    
     return {
         "success": True,
         "sport_name": sport_row["name"],
         "booking_date": booking_date,
-        "available_slots": free_slots,
-        "message": f"Available slots for {sport_row['name']} on {booking_date}: {', '.join(free_slots) if free_slots else 'None'}"
+        "available_slots": ranked_slots,
+        "message": f"Available slots for {sport_row['name']} on {booking_date}: {', '.join(ranked_slots) if ranked_slots else 'None'}"
     }
 
 def create_booking_tool(user_id: int, sport_name: str, booking_date: str, time_slot: str, notes: str = "") -> Dict[str, Any]:
@@ -561,4 +585,99 @@ def list_filtered_users_tool(role: str, user_filter: str = "all") -> Dict[str, A
         "count": len(data),
         "message": msg,
         "data": data
+    }
+
+def get_facility_utilization_tool() -> Dict[str, Any]:
+    """Retrieves facility utilization metrics and individual court breakdown."""
+    analytics = sports_service.get_advanced_analytics()
+    breakdown = analytics.facility_breakdown
+    msg = (
+        f"🏟️ **Facility Utilization Analytics**:\n"
+        f"• **Overall Facility Utilization Rate:** {analytics.facility_utilization_rate}%\n"
+        f"• **Monitored Facilities:** {len(breakdown)} active campus facilities\n"
+        f"• Check the breakdown below for individual court and ground utilization."
+    )
+    return {
+        "success": True,
+        "message": msg,
+        "data": breakdown,
+        "facility_utilization_rate": analytics.facility_utilization_rate
+    }
+
+def get_peak_booking_hours_tool() -> Dict[str, Any]:
+    """Retrieves peak booking hours and time slot distribution."""
+    analytics = sports_service.get_advanced_analytics()
+    peak_dist = analytics.peak_hours_distribution
+    top_slot = peak_dist[0]["time_slot"] if peak_dist else "None"
+    msg = (
+        f"⏰ **Peak Booking Hours Analytics**:\n"
+        f"• **Busiest Time Slot:** {top_slot}\n"
+        f"• **Active Peak Distribution:** Analyzed across all {len(ALL_STANDARD_SLOTS)} daily campus intervals.\n"
+        f"• Check the table below for booking volumes per time slot."
+    )
+    return {
+        "success": True,
+        "message": msg,
+        "data": peak_dist,
+        "peak_slot": top_slot
+    }
+
+def get_sport_popularity_tool() -> Dict[str, Any]:
+    """Retrieves sport popularity rankings and total reservations."""
+    analytics = sports_service.get_advanced_analytics()
+    pop_sports = analytics.popular_sports
+    top_sport = pop_sports[0]["sport_name"] if pop_sports else "None"
+    msg = (
+        f"🏅 **Sport Popularity Analytics**:\n"
+        f"• **#1 Most Popular Sport:** {top_sport}\n"
+        f"• **Total Tracked Sports:** {len(pop_sports)} sports\n"
+        f"• Check the breakdown below for popularity percentage and total reservations."
+    )
+    return {
+        "success": True,
+        "message": msg,
+        "data": pop_sports,
+        "top_sport": top_sport
+    }
+
+def get_cancellation_statistics_tool(user_id: Optional[int] = None, role: str = "admin") -> Dict[str, Any]:
+    """Retrieves booking cancellation metrics."""
+    analytics = sports_service.get_advanced_analytics()
+    if role != "admin" and user_id is not None:
+        user_bookings = sports_service.list_user_bookings(user_id)
+        user_total = len(user_bookings)
+        user_cancelled = len([b for b in user_bookings if b.status == "cancelled"])
+        user_rate = round((user_cancelled / user_total * 100) if user_total > 0 else 0.0, 1)
+        msg = (
+            f"📋 **Your Personal Cancellation Summary**:\n"
+            f"• **Total Bookings:** {user_total}\n"
+            f"• **Cancelled Bookings:** {user_cancelled}\n"
+            f"• **Personal Cancellation Rate:** {user_rate}%"
+        )
+        return {
+            "success": True,
+            "message": msg,
+            "data": {
+                "total_bookings": user_total,
+                "cancelled_bookings": user_cancelled,
+                "cancellation_rate": user_rate
+            }
+        }
+    
+    msg = (
+        f"📊 **Campus Cancellation Statistics**:\n"
+        f"• **Total Bookings Recorded:** {analytics.total_bookings}\n"
+        f"• **Active Confirmed:** {analytics.active_confirmed_bookings}\n"
+        f"• **Total Cancelled:** {analytics.cancelled_bookings}\n"
+        f"• **Overall Cancellation Rate:** {analytics.cancellation_rate}%"
+    )
+    return {
+        "success": True,
+        "message": msg,
+        "data": {
+            "total_bookings": analytics.total_bookings,
+            "active_confirmed_bookings": analytics.active_confirmed_bookings,
+            "cancelled_bookings": analytics.cancelled_bookings,
+            "cancellation_rate": analytics.cancellation_rate
+        }
     }

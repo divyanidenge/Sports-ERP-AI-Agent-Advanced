@@ -17,7 +17,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return hmac.compare_digest(hash_password(plain_password), hashed_password)
 
 def get_db_connection():
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
@@ -30,6 +30,7 @@ def reset_db_for_tests():
         )
     conn = get_db_connection()
     cursor = conn.cursor()
+    cursor.execute("DROP TABLE IF EXISTS audit_logs")
     cursor.execute("DROP TABLE IF EXISTS attendance")
     cursor.execute("DROP TABLE IF EXISTS bookings")
     cursor.execute("DROP TABLE IF EXISTS facilities")
@@ -83,7 +84,7 @@ def init_db():
     )
     """)
 
-    # Bookings Table
+    # Bookings Table (with concurrency guard and idempotency key)
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS bookings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -94,11 +95,19 @@ def init_db():
         time_slot TEXT NOT NULL,
         status TEXT NOT NULL DEFAULT 'confirmed',
         notes TEXT,
+        idempotency_key TEXT UNIQUE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
         FOREIGN KEY (facility_id) REFERENCES facilities(id) ON DELETE CASCADE,
         FOREIGN KEY (sport_id) REFERENCES sports(id) ON DELETE CASCADE
     )
+    """)
+
+    # Concurrency Protection: Partial Unique Index to physically prevent double-booking on the same court/slot
+    cursor.execute("""
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_active_facility_booking 
+    ON bookings (facility_id, booking_date, time_slot) 
+    WHERE status = 'confirmed'
     """)
 
     # Attendance Table
@@ -117,9 +126,74 @@ def init_db():
     )
     """)
 
+    # Audit Logs Table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS audit_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        user_email TEXT,
+        action TEXT NOT NULL,
+        resource_type TEXT,
+        resource_id INTEGER,
+        details TEXT,
+        status TEXT NOT NULL,
+        ip_address TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_user_action ON audit_logs (user_id, created_at, action)")
+
     conn.commit()
+    migrate_db(conn)
     seed_data(conn)
     conn.close()
+
+def migrate_db(conn):
+    """
+    Safely and repeatably migrates an existing SQLite database to the latest schema
+    without dropping or destroying existing data rows.
+    """
+    cursor = conn.cursor()
+    
+    # 1. Check if 'users' table has 'is_blocked' column
+    cursor.execute("PRAGMA table_info(users)")
+    user_cols = [r["name"] if isinstance(r, sqlite3.Row) else r[1] for r in cursor.fetchall()]
+    if user_cols and "is_blocked" not in user_cols:
+        cursor.execute("ALTER TABLE users ADD COLUMN is_blocked INTEGER DEFAULT 0")
+    
+    # 2. Check if 'bookings' table has 'idempotency_key' column
+    cursor.execute("PRAGMA table_info(bookings)")
+    booking_cols = [r["name"] if isinstance(r, sqlite3.Row) else r[1] for r in cursor.fetchall()]
+    if booking_cols and "idempotency_key" not in booking_cols:
+        cursor.execute("ALTER TABLE bookings ADD COLUMN idempotency_key TEXT")
+    
+    # 3. Ensure 'audit_logs' table exists
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS audit_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        user_email TEXT,
+        action TEXT NOT NULL,
+        resource_type TEXT,
+        resource_id INTEGER,
+        details TEXT,
+        status TEXT NOT NULL,
+        ip_address TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
+    # 4. Ensure concurrency protection index on active bookings exists
+    cursor.execute("""
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_active_facility_booking 
+    ON bookings (facility_id, booking_date, time_slot) 
+    WHERE status = 'confirmed'
+    """)
+
+    # 5. Ensure audit logs index exists
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_user_action ON audit_logs (user_id, created_at, action)")
+
+    conn.commit()
 
 def seed_data(conn):
     cursor = conn.cursor()

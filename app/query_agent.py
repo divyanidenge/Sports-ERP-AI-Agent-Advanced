@@ -1,11 +1,21 @@
 import re
 import json
+import logging
 import requests
-from datetime import date, timedelta
+from datetime import datetime, date, timedelta
 from typing import Dict, Any, Optional, List, Tuple
 from app.config import GEMINI_API_KEY
 from app.models import QueryResponse
 import app.agent_tools as tools
+import app.sports_service as sports_service
+from app.constraint_engine import validate_booking_request, validate_cancellation_request
+from app.agents.orchestrator import SportsOrchestrator
+
+logger = logging.getLogger("sports_erp.query_agent")
+logger.setLevel(logging.INFO)
+
+# Global multi-agent orchestrator instance
+orchestrator = SportsOrchestrator()
 
 # Session memory store: session_key -> { "history": [...], "pending_action": {...}, "last_entities": {...} }
 SESSION_STORE: Dict[str, Dict[str, Any]] = {}
@@ -50,23 +60,6 @@ SPORTS_SYNONYMS = {
     "squash": "Squash"
 }
 
-TIME_SLOT_PATTERNS = [
-    # 06:00 - 07:00
-    (r"\b(?:0?6:00\s*(?:-|to)\s*0?7:00)\b|\b(?:6|06)\s*(?:-|to)\s*(?:7|07)\s*am\b|\b(?:6|06)\s*(?:am|subah)\b|\b06:00\b|\b6\s*baje\s*subah\b|\bsubah\s*6\s*baje\b", "06:00 - 07:00"),
-    # 07:00 - 08:00
-    (r"\b(?:0?7:00\s*(?:-|to)\s*0?8:00)\b|\b(?:7|07)\s*(?:-|to)\s*(?:8|08)\s*am\b|\b(?:7|07)\s*(?:am|subah)\b|\b07:00\b|\b7\s*baje\s*subah\b|\bsubah\s*7\s*baje\b", "07:00 - 08:00"),
-    # 08:00 - 09:00
-    (r"\b(?:0?8:00\s*(?:-|to)\s*0?9:00)\b|\b(?:8|08)\s*(?:-|to)\s*(?:9|09)\s*(?:am|subah)?\b|\b(?:8|08)\s*(?:am|subah)\b|\b08:00\b|\b8\s*baje\s*subah\b|\bsubah\s*8\s*baje\b|\b8\s*to\s*9\b|\b8-9\b", "08:00 - 09:00"),
-    # 16:00 - 17:00 (4 PM - 5 PM)
-    (r"\b(?:16:00\s*(?:-|to)\s*17:00)\b|\b(?:4|04|16)\s*(?:-|to)\s*(?:5|05|17)\s*(?:pm|shaam|evening)?\b|\b(?:4|04)\s*(?:pm|shaam|evening)\b|\b16:00\b|\b4\s*baje\s*(?:shaam|pm)?\b|\bshaam\s*4\s*baje\b|\b4\s*to\s*5\b|\b4-5\b", "16:00 - 17:00"),
-    # 17:00 - 18:00 (5 PM - 6 PM)
-    (r"\b(?:17:00\s*(?:-|to)\s*18:00)\b|\b(?:5|05|17)\s*(?:-|to)\s*(?:6|06|18)\s*(?:pm|shaam|evening)?\b|\b(?:5|05)\s*(?:pm|shaam|evening)\b|\b17:00\b|\b5\s*baje\b|\bshaam\s*5\s*baje\b|\b5pm\b|\b5\s*pm\b|\b5\s*to\s*6\b|\b5-6\b", "17:00 - 18:00"),
-    # 18:00 - 19:00 (6 PM - 7 PM)
-    (r"\b(?:18:00\s*(?:-|to)\s*19:00)\b|\b(?:6|06|18)\s*(?:-|to)\s*(?:7|07|19)\s*(?:pm|shaam|evening)?\b|\b(?:6|06)\s*(?:pm|shaam|evening)\b|\b18:00\b|\b6\s*baje\s*(?:shaam|pm)?\b|\bshaam\s*6\s*baje\b|\b6pm\b|\b6\s*pm\b|\b6\s*to\s*7\b|\b6-7\b", "18:00 - 19:00"),
-    # 19:00 - 20:00 (7 PM - 8 PM)
-    (r"\b(?:19:00\s*(?:-|to)\s*20:00)\b|\b(?:7|07|19)\s*(?:-|to)\s*(?:8|08|20)\s*(?:pm|shaam|evening|night)?\b|\b(?:7|07)\s*(?:pm|shaam|evening)\b|\b19:00\b|\b7\s*baje\s*(?:shaam|pm)?\b|\bshaam\s*7\s*baje\b|\b7pm\b|\b7\s*pm\b|\b8\s*pm\b|\b8pm\b|\b20:00\b|\b7\s*to\s*8\b|\b7-8\b", "19:00 - 20:00"),
-]
-
 def extract_sport(text: str, fallback_sport: Optional[str] = None) -> Optional[str]:
     low = text.lower()
     for syn, canonical in SPORTS_SYNONYMS.items():
@@ -97,10 +90,88 @@ def extract_date(text: str, fallback_date: Optional[str] = None) -> str:
     return fallback_date or (date.today() + timedelta(days=1)).isoformat()
 
 def extract_time_slot(text: str, fallback_slot: Optional[str] = None) -> Optional[str]:
-    low = text.lower()
-    for pat, slot in TIME_SLOT_PATTERNS:
-        if re.search(pat, low):
-            return slot
+    """
+    Robust natural-language time slot extractor supporting standard slot formats,
+    12-hour AM/PM times, 24-hour times, time ranges, and Hinglish expressions.
+    """
+    # Strip ISO and slash dates first so hyphens in dates (like 2026-11-20) are not confused with time ranges
+    low = re.sub(r"\b\d{4}-\d{2}-\d{2}\b", " ", text.lower())
+    low = re.sub(r"\b\d{1,2}/\d{1,2}/\d{4}\b", " ", low).strip()
+    
+    # 1. Direct match for standard range (e.g. "06:00 - 07:00", "09:00 - 10:00", "17:00 to 18:00")
+    m_range = re.search(r"\b(0?\d|1\d|2[0-3]):00\s*(?:-|to)\s*(0?\d|1\d|2[0-3]):00\b", low)
+    if m_range:
+        h1 = int(m_range.group(1))
+        h2 = int(m_range.group(2))
+        return f"{h1:02d}:00 - {h2:02d}:00"
+
+    # 2. Number to number with AM/PM/subah/shaam (e.g. "8 to 9 am", "8-9 am", "5 to 6 pm", "5-6", "8 to 9")
+    m_range_num = re.search(r"\b(0?\d|1\d|2[0-3])\s*(?:-|to)\s*(0?\d|1\d|2[0-3])\s*(am|pm|subah|shaam|evening|night)?\b", low)
+    if m_range_num:
+        h1 = int(m_range_num.group(1))
+        h2 = int(m_range_num.group(2))
+        meridiem = m_range_num.group(3)
+        if meridiem in ["pm", "shaam", "evening", "night"] and h1 < 12:
+            h1 += 12
+            h2 += 12
+        elif (meridiem in ["am", "subah"] or not meridiem) and h1 == 12:
+            h1 = 0
+            h2 = 1
+        elif not meridiem and h1 in [4, 5, 6, 7, 8] and "shaam" in low:
+            h1 += 12
+            h2 += 12
+        return f"{h1:02d}:00 - {h2:02d}:00"
+
+    # 3. Explicit AM / PM times (e.g. "9 am", "9am", "9:00 am", "5 pm", "5pm", "12 pm", "12 am", "7 am")
+    m_ampm = re.search(r"\b(0?\d|1\d|2[0-3])(?::([0-5]\d))?\s*(am|pm)\b", low)
+    if m_ampm:
+        h = int(m_ampm.group(1))
+        merid = m_ampm.group(3)
+        if merid == "pm" and h != 12:
+            h += 12
+        elif merid == "am" and h == 12:
+            h = 0
+        return f"{h:02d}:00 - {(h + 1) % 24:02d}:00"
+
+    # 4. Hinglish expressions (e.g. "subah 9 baje", "9 baje subah", "shaam 5 baje", "5 baje shaam", "5 baje", "9 baje")
+    m_hi_pre = re.search(r"\b(subah|shaam|dopahar|raat)\s*(?:ke\s*)?(0?\d|1\d|2[0-3])\s*(?:baje)?\b", low)
+    if m_hi_pre:
+        period = m_hi_pre.group(1)
+        h = int(m_hi_pre.group(2))
+        if period in ["shaam", "raat"] and h < 12:
+            h += 12
+        elif period == "dopahar" and h < 12 and h != 12:
+            h += 12
+        elif period == "subah" and h == 12:
+            h = 0
+        return f"{h:02d}:00 - {(h + 1) % 24:02d}:00"
+
+    m_hi_post = re.search(r"\b(0?\d|1\d|2[0-3])\s*baje\s*(subah|shaam|dopahar|raat|pm|am)?\b", low)
+    if m_hi_post:
+        h = int(m_hi_post.group(1))
+        period = m_hi_post.group(2)
+        if period in ["shaam", "raat", "pm"] and h < 12:
+            h += 12
+        elif period in ["dopahar"] and h < 12 and h != 12:
+            h += 12
+        elif period in ["subah", "am"] and h == 12:
+            h = 0
+        elif not period and h in [4, 5, 6, 7]:
+            h += 12
+        return f"{h:02d}:00 - {(h + 1) % 24:02d}:00"
+
+    # 5. Standalone 24-hour format (e.g. "06:00", "07:00", "08:00", "09:00", "16:00", "17:00", "18:00", "19:00")
+    m_24h = re.search(r"\b(0[0-9]|1[0-9]|2[0-3]):00\b", low)
+    if m_24h:
+        h = int(m_24h.group(1))
+        return f"{h:02d}:00 - {(h + 1) % 24:02d}:00"
+
+    # 6. Special keywords
+    if "noon" in low or "midday" in low:
+        return "12:00 - 13:00"
+    if "midnight" in low:
+        return "00:00 - 01:00"
+
     return fallback_slot
 
 def extract_ordinal_slot(text: str, available_slots: List[str]) -> Optional[str]:
@@ -151,11 +222,79 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
     # --- 1. CHECK PENDING CONFIRMATION ACTION ---
     pending = session.get("pending_action")
     if pending:
-        if is_affirmation(q):
+        pa_time = pending.get("timestamp")
+        is_expired = False
+        if pa_time and (datetime.now() - pa_time) > timedelta(minutes=10):
+            is_expired = True
+            session["pending_action"] = None
+        
+        if is_expired:
+            if is_affirmation(q) or is_negation(q):
+                return QueryResponse(
+                    intent="pending_action_expired",
+                    message="Your previous pending confirmation has expired due to inactivity. Please make a new booking or action request.",
+                    success=False
+                )
+        elif is_affirmation(q):
             action_type = pending.get("type")
             session["pending_action"] = None # Clear pending state
 
-            if action_type == "book_slot":
+            if action_type == "availability_followup":
+                # User affirmed interest in booking following an availability check.
+                # Validate constraints deterministically (TRACE-CS)
+                c_val = validate_booking_request(
+                    user_id=user_id,
+                    sport_name=pending["sport_name"],
+                    booking_date=pending["booking_date"],
+                    time_slot=pending["time_slot"],
+                    facility_id=pending.get("facility_id"),
+                    user_role=user_role
+                )
+                if not c_val.is_valid:
+                    return QueryResponse(
+                        intent="booking_failed",
+                        message=f"❌ {c_val.explanation}",
+                        success=False,
+                        suggested_slots=c_val.suggested_alternatives
+                    )
+                
+                # Arm for final booking confirmation (Do NOT commit to database yet)
+                fac_name = c_val.details.get("facility_name", pending.get("facility_name", "Court"))
+                session["pending_action"] = {
+                    "type": "book_slot",
+                    "sport_name": pending["sport_name"],
+                    "facility_id": c_val.details.get("facility_id", pending.get("facility_id")),
+                    "facility_name": fac_name,
+                    "booking_date": pending["booking_date"],
+                    "time_slot": pending["time_slot"],
+                    "timestamp": datetime.now()
+                }
+                return QueryResponse(
+                    intent="confirm_booking_request",
+                    message=f"Please confirm: Would you like to book {fac_name} ({pending['sport_name']}) on {pending['booking_date']} from {pending['time_slot']}?",
+                    success=True,
+                    pending_confirmation=True,
+                    data=c_val.details
+                )
+
+            elif action_type == "book_slot":
+                # Deterministic constraint validation (TRACE-CS)
+                c_val = validate_booking_request(
+                    user_id=user_id,
+                    sport_name=pending["sport_name"],
+                    booking_date=pending["booking_date"],
+                    time_slot=pending["time_slot"],
+                    facility_id=pending.get("facility_id"),
+                    user_role=user_role
+                )
+                if not c_val.is_valid:
+                    return QueryResponse(
+                        intent="booking_failed",
+                        message=f"❌ {c_val.explanation}",
+                        success=False,
+                        suggested_slots=c_val.suggested_alternatives
+                    )
+
                 res = tools.create_booking_tool(
                     user_id=user_id,
                     sport_name=pending["sport_name"],
@@ -330,7 +469,8 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
         session["pending_action"] = {
             "type": "block_user",
             "target_id": user_info["id"],
-            "target_name": user_info["name"]
+            "target_name": user_info["name"],
+            "timestamp": datetime.now()
         }
         return QueryResponse(
             intent="confirm_block_user",
@@ -467,20 +607,28 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
         )
 
     # --- 9. QUERY: VIEW BOOKINGS (Read / View bookings) ---
+    is_analytics_intent_query = any(k in q for k in [
+        "utilization", "peak", "busy hours", "rush hours", "popularity", "popular sport",
+        "popular sports", "cancellation statistics", "cancellation rate", "cancellation stats",
+        "analytics", "kitni bookings cancel"
+    ])
+
     is_view_bookings_query = (
-        any(re.search(pat, q) for pat in [
-            r"\b(?:meri|mera|my|all|active|upcoming|past|today's|todays|cancelled)\s+(?:active\s+|upcoming\s+|all\s+|cancelled\s+)?bookings?\b",
-            r"\b(?:show|list|view|get|check|display|dikhao|batao)\s+(?:all\s+|my\s+|meri\s+|active\s+|upcoming\s+|cancelled\s+)*bookings?\b",
-            r"\bdo\s+i\s+have\s+(?:any\s+)?(?:active\s+|upcoming\s+|past\s+)?bookings?\b",
-            r"\bwhat\s+bookings?\s+do\s+i\s+have\b",
-            r"\bwhen\s+is\s+my\s+next\s+booking\b",
-            r"\bnext\s+booking\b",
-            r"\bcheck\s+(?:my\s+)?slots?\b",
-            r"\bmera\s+schedule\b",
-            r"\bmy\s+schedule\b",
-            r"\bbookings?\s+(?:kya\s+hain|kya\s+hai|dikhao|list|status|history)\b"
-        ]) or
-        (any(k in q for k in ["booking", "bookings"]) and any(k in q for k in ["show", "list", "view", "dikhao", "batao", "status", "history", "active", "upcoming", "my all", "all my", "do i have", "have i", "any"]))
+        not is_analytics_intent_query and (
+            any(re.search(pat, q) for pat in [
+                r"\b(?:meri|mera|my|all|active|upcoming|past|today's|todays|cancelled)\s+(?:active\s+|upcoming\s+|all\s+|cancelled\s+)?bookings?\b",
+                r"\b(?:show|list|view|get|check|display|dikhao|batao)\s+(?:all\s+|my\s+|meri\s+|active\s+|upcoming\s+|cancelled\s+)*bookings?\b",
+                r"\bdo\s+i\s+have\s+(?:any\s+)?(?:active\s+|upcoming\s+|past\s+)?bookings?\b",
+                r"\bwhat\s+bookings?\s+do\s+i\s+have\b",
+                r"\bwhen\s+is\s+my\s+next\s+booking\b",
+                r"\bnext\s+booking\b",
+                r"\bcheck\s+(?:my\s+)?slots?\b",
+                r"\bmera\s+schedule\b",
+                r"\bmy\s+schedule\b",
+                r"\bbookings?\s+(?:kya\s+hain|kya\s+hai|dikhao|list|status|history)\b"
+            ]) or
+            (any(k in q for k in ["booking", "bookings"]) and any(k in q for k in ["show", "list", "view", "dikhao", "batao", "status", "history", "active", "upcoming", "my all", "all my", "do i have", "have i", "any"]))
+        )
     )
 
     is_direct_book_word = any(re.search(pat, q) for pat in [
@@ -489,16 +637,18 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
         r"\bkhelna\s+hai\b"
     ]) and not is_view_bookings_query and not is_cancel_action
 
-    if is_view_bookings_query and not is_cancel_action and not is_direct_book_word:
+    if is_view_bookings_query and not is_cancel_action and not is_direct_book_word and not is_analytics_intent_query:
         filter_type = "all"
         if "today" in q or "aaj" in q:
             filter_type = "today"
         elif "next" in q or "agli" in q:
             filter_type = "next"
-        elif "cancelled" in q or "canceled" in q:
+        elif "cancelled" in q or "canceled" in q or "cancel" in q:
             filter_type = "cancelled"
-        elif "upcoming" in q or "aane wali" in q or "active" in q:
+        elif "upcoming" in q or "aane wali" in q:
             filter_type = "upcoming"
+        elif "active" in q or "confirmed" in q:
+            filter_type = "active"
 
         res = tools.search_my_bookings(user_id, filter_type=filter_type)
         return QueryResponse(
@@ -582,7 +732,96 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
             data=res["data"]
         )
 
-    # --- 13. QUERY: OVERVIEW / STATS ---
+    # --- 13. DEDICATED ERP ANALYTICS INTENTS ---
+    # 13.1 Facility Utilization
+    if any(k in q for k in [
+        "facility utilization", "court utilization", "utilization analytics", "utilization rate",
+        "facilities utilization", "ground utilization", "facilities kitni busy", "court usage",
+        "facility usage", "kaun sa court kitna use", "court utilization rate"
+    ]):
+        res = tools.get_facility_utilization_tool()
+        return QueryResponse(
+            intent="facility_utilization",
+            message=res["message"],
+            success=True,
+            data=res["data"]
+        )
+
+    # 13.2 Peak Booking Hours
+    if any(k in q for k in [
+        "peak booking hours", "peak hours", "busy hours", "rush hours", "peak time",
+        "busiest slot", "kaunsa time sabse busy", "peak slots", "rush time", "busiest time", "busiest hours"
+    ]):
+        res = tools.get_peak_booking_hours_tool()
+        return QueryResponse(
+            intent="peak_booking_hours",
+            message=res["message"],
+            success=True,
+            data=res["data"]
+        )
+
+    # 13.3 Sport Popularity
+    if any(k in q for k in [
+        "sport popularity", "popular sports", "most played sport", "most popular sport",
+        "top sports", "sabse popular sport", "kaunsa sport sabse zyada", "sports popularity",
+        "popularity of sports", "most booked sport"
+    ]):
+        res = tools.get_sport_popularity_tool()
+        return QueryResponse(
+            intent="sport_popularity",
+            message=res["message"],
+            success=True,
+            data=res["data"]
+        )
+
+    # 13.4 Cancellation Statistics
+    if any(k in q for k in [
+        "cancellation statistics", "cancellation rate", "cancelled bookings stats",
+        "how many bookings are cancelled", "kitni bookings cancel hui", "cancellation metrics",
+        "cancellations stats", "booking cancellation rate", "cancellation stats", "cancellation report"
+    ]):
+        res = tools.get_cancellation_statistics_tool(user_id=user_id, role=user_role)
+        return QueryResponse(
+            intent="cancellation_statistics",
+            message=res["message"],
+            success=True,
+            data=res["data"]
+        )
+
+    # 13.5 Comprehensive Advanced Analytics
+    if any(k in q for k in [
+        "advanced analytics", "analytics overview", "comprehensive analytics",
+        "erp analytics", "show analytics", "view analytics", "analytics"
+    ]):
+        if user_role == "admin":
+            analytics = sports_service.get_advanced_analytics()
+            top_sport = analytics.popular_sports[0]["sport_name"] if analytics.popular_sports else "None"
+            peak_slot = analytics.peak_hours_distribution[0]["time_slot"] if analytics.peak_hours_distribution else "None"
+            msg = (
+                f"📊 **Advanced Sports ERP Analytics**:\n"
+                f"• **Total Bookings:** {analytics.total_bookings} ({analytics.active_confirmed_bookings} active, {analytics.cancelled_bookings} cancelled, {analytics.cancellation_rate}% cancellation rate)\n"
+                f"• **Facility Utilization Rate:** {analytics.facility_utilization_rate}%\n"
+                f"• **Most Popular Sport:** {top_sport}\n"
+                f"• **Peak Booking Interval:** {peak_slot}\n"
+                f"• **Attendance Present Rate:** {analytics.attendance_present_rate}%"
+            )
+            return QueryResponse(
+                intent="advanced_analytics",
+                message=msg,
+                success=True,
+                data=analytics.model_dump()
+            )
+        else:
+            att = tools.get_user_attendance_tool(user_id)
+            book = tools.search_my_bookings(user_id)
+            return QueryResponse(
+                intent="student_analytics",
+                message=f"Your Personal Sports Analytics: {book['active_count']} active bookings, {att['count']} total sessions attended with a {att['attendance_rate']}% attendance rate.",
+                success=True,
+                data={"bookings": book, "attendance": att}
+            )
+
+    # 13.6 General Dashboard Stats / Overview
     if any(k in q for k in ["overview", "dashboard", "summary", "stats", "statistics", "report", "sports erp overview"]):
         res = tools.get_dashboard_stats_tool()
         return QueryResponse(
@@ -639,10 +878,14 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
         detected_sport = sport_in_query or session["last_entities"].get("sport")
         detected_date = date_in_query or session["last_entities"].get("date") or (date.today() + timedelta(days=1)).isoformat()
         
-        if is_avail_query or (not is_explicit_book_action and not resolved_slot_in_q):
+        if resolved_slot_in_q:
             detected_slot = resolved_slot_in_q
+        elif is_explicit_book_action and not (sport_in_query or date_in_query):
+            detected_slot = session["last_entities"].get("time_slot")
+        elif not is_explicit_book_action and not is_avail_query:
+            detected_slot = session["last_entities"].get("time_slot")
         else:
-            detected_slot = resolved_slot_in_q or session["last_entities"].get("time_slot")
+            detected_slot = None
 
         if not detected_sport:
             return QueryResponse(
@@ -690,7 +933,8 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
                     "facility_id": avail["facility_id"],
                     "facility_name": fac_name,
                     "booking_date": detected_date,
-                    "time_slot": detected_slot
+                    "time_slot": detected_slot,
+                    "timestamp": datetime.now()
                 }
                 msg = f"{fac_name} ({detected_sport}) is available on {detected_date} from {detected_slot}. Shall I confirm this booking?"
                 return QueryResponse(
@@ -701,7 +945,16 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
                     data=avail
                 )
             else:
-                # User just asked for availability -> Inform only, do NOT arm confirmation
+                # User asked for availability -> Inform availability and arm pending availability_followup intent
+                session["pending_action"] = {
+                    "type": "availability_followup",
+                    "sport_name": detected_sport,
+                    "facility_id": avail["facility_id"],
+                    "facility_name": fac_name,
+                    "booking_date": detected_date,
+                    "time_slot": detected_slot,
+                    "timestamp": datetime.now()
+                }
                 msg = f"✅ {fac_name} ({detected_sport}) is available on {detected_date} at {detected_slot}. If you would like to book it, please say 'Yes' or 'Book it'."
                 return QueryResponse(
                     intent="check_slot_availability",

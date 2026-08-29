@@ -1,14 +1,15 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException, status
 from typing import List, Optional
 from app.models import (
     SportCreate, SportResponse,
     FacilityCreate, FacilityResponse,
     BookingCreate, BookingResponse,
     AttendanceCreate, AttendanceResponse,
-    DashboardStats
+    DashboardStats, AdvancedAnalytics, AuditLogResponse
 )
 from app.auth import get_current_user, require_admin
 import app.sports_service as sports_service
+import app.audit_service as audit_service
 
 router = APIRouter(tags=["Sports, Facilities, Bookings & Attendance"])
 
@@ -68,9 +69,37 @@ def get_my_attendance(current_user: dict = Depends(get_current_user)):
 
 @router.post("/attendance", response_model=AttendanceResponse)
 def record_attendance(data: AttendanceCreate, current_user: dict = Depends(get_current_user)):
+    # Students can only check-in for themselves; admins can mark attendance for anyone
+    if current_user["role"] != "admin" and data.user_id != current_user["id"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to mark attendance for other users."
+        )
     return sports_service.mark_attendance(data, marked_by=current_user["id"])
 
-# --- Dashboard ---
+# --- Dashboard & Advanced Analytics ---
 @router.get("/dashboard/overview", response_model=DashboardStats)
 def get_dashboard(current_user: dict = Depends(get_current_user)):
     return sports_service.get_dashboard_overview()
+
+@router.get("/analytics/advanced", response_model=AdvancedAnalytics)
+def get_advanced_analytics_endpoint(admin: dict = Depends(require_admin)):
+    return sports_service.get_advanced_analytics()
+
+@router.get("/analytics/benchmark-evaluation")
+def get_benchmark_evaluation(admin: dict = Depends(require_admin)):
+    """Executes and returns the Function Calling vs. Text-to-SQL empirical evaluation report."""
+    from app.eval_benchmark import run_sports_erp_benchmark
+    return run_sports_erp_benchmark(test_user_id=admin["id"], role=admin["role"])
+
+# --- Audit Logs ---
+@router.get("/audit-logs", response_model=List[AuditLogResponse])
+def get_audit_logs(
+    user_id: Optional[int] = Query(None),
+    action: Optional[str] = Query(None),
+    limit: int = Query(50),
+    offset: int = Query(0),
+    admin: dict = Depends(require_admin)
+):
+    return audit_service.list_audit_logs(user_id=user_id, action=action, limit=limit, offset=offset)
+

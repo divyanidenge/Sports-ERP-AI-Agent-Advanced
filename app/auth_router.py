@@ -23,9 +23,11 @@ def get_users(admin: dict = Depends(require_admin)):
     return auth_service.list_all_users()
 
 @router.post("/users/{user_id}/block")
+@router.patch("/users/{user_id}/block")
 def block_user(user_id: int, admin: dict = Depends(require_admin)):
     return auth_service.block_user_by_id(user_id)
 
 @router.post("/users/{user_id}/unblock")
+@router.patch("/users/{user_id}/unblock")
 def unblock_user(user_id: int, admin: dict = Depends(require_admin)):
     return auth_service.unblock_user_by_id(user_id)

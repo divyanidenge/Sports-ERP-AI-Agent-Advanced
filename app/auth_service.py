@@ -2,6 +2,7 @@ from fastapi import HTTPException, status
 from app.database import get_db_connection, hash_password, verify_password
 from app.models import UserRegister, UserLogin, UserResponse, TokenResponse
 from app.auth import create_access_token
+from app.audit_service import log_audit_event
 
 def register_user(data: UserRegister) -> UserResponse:
     conn = get_db_connection()
@@ -11,6 +12,12 @@ def register_user(data: UserRegister) -> UserResponse:
     cursor.execute("SELECT id FROM users WHERE LOWER(email) = LOWER(?)", (data.email.strip(),))
     if cursor.fetchone():
         conn.close()
+        log_audit_event(
+            action="REGISTRATION_FAILED",
+            status="FAILED",
+            user_email=data.email.strip().lower(),
+            details="Attempted registration with already existing email"
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="An account with this email already exists. Please log in."
@@ -28,6 +35,15 @@ def register_user(data: UserRegister) -> UserResponse:
     row = cursor.fetchone()
     conn.close()
     
+    log_audit_event(
+        action="USER_REGISTERED",
+        user_id=user_id,
+        user_email=data.email.strip().lower(),
+        resource_type="user",
+        resource_id=user_id,
+        details=f"User '{data.name.strip()}' registered with role '{data.role}'"
+    )
+    
     return UserResponse(**dict(row))
 
 def authenticate_user(data: UserLogin) -> TokenResponse:
@@ -42,6 +58,12 @@ def authenticate_user(data: UserLogin) -> TokenResponse:
     conn.close()
     
     if not row:
+        log_audit_event(
+            action="LOGIN_FAILED",
+            status="FAILED",
+            user_email=data.email.strip().lower(),
+            details="User not found during login attempt"
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password."
@@ -49,12 +71,26 @@ def authenticate_user(data: UserLogin) -> TokenResponse:
     
     user_dict = dict(row)
     if not verify_password(data.password, user_dict["hashed_password"]):
+        log_audit_event(
+            action="LOGIN_FAILED",
+            status="FAILED",
+            user_id=user_dict["id"],
+            user_email=user_dict["email"],
+            details="Incorrect password provided"
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password."
         )
     
     if user_dict["is_blocked"] == 1:
+        log_audit_event(
+            action="LOGIN_BLOCKED",
+            status="DENIED",
+            user_id=user_dict["id"],
+            user_email=user_dict["email"],
+            details="Login denied: Account is blocked by administrator"
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is blocked by administrator. Please contact sports department."
@@ -63,6 +99,13 @@ def authenticate_user(data: UserLogin) -> TokenResponse:
     # Generate JWT token
     token_data = {"sub": str(user_dict["id"]), "email": user_dict["email"], "role": user_dict["role"]}
     token = create_access_token(token_data)
+    
+    log_audit_event(
+        action="LOGIN_SUCCESS",
+        user_id=user_dict["id"],
+        user_email=user_dict["email"],
+        details=f"Successful authentication for role '{user_dict['role']}'"
+    )
     
     user_resp = UserResponse(
         id=user_dict["id"],
@@ -101,6 +144,16 @@ def block_user_by_id(user_id: int):
     cursor.execute("UPDATE users SET is_blocked = 1 WHERE id = ?", (user_id,))
     conn.commit()
     conn.close()
+    
+    log_audit_event(
+        action="USER_BLOCKED",
+        user_id=user_id,
+        user_email=user["email"],
+        resource_type="user",
+        resource_id=user_id,
+        details=f"User '{user['name']}' (ID #{user_id}) was blocked by administrator"
+    )
+    
     return {"message": f"User ID {user_id} ({user['name']}) has been successfully blocked.", "user_id": user_id, "is_blocked": 1}
 
 def unblock_user_by_id(user_id: int):
@@ -117,4 +170,14 @@ def unblock_user_by_id(user_id: int):
     cursor.execute("UPDATE users SET is_blocked = 0 WHERE id = ?", (user_id,))
     conn.commit()
     conn.close()
+    
+    log_audit_event(
+        action="USER_UNBLOCKED",
+        user_id=user_id,
+        user_email=user["email"],
+        resource_type="user",
+        resource_id=user_id,
+        details=f"User '{user['name']}' (ID #{user_id}) was unblocked by administrator"
+    )
+    
     return {"message": f"User ID {user_id} ({user['name']}) has been successfully unblocked.", "user_id": user_id, "is_blocked": 0}
