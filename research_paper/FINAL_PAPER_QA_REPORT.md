@@ -52,7 +52,7 @@ research_paper/
 │   ├── booking_workflow.png                     # Fig. 3: Conversational Booking State Machine
 │   ├── constraint_resolution.png                # Fig. 4: Invariant Checking & MUS/MCS Solver
 │   ├── security_rbac.png                        # Fig. 5: Zero-Trust RBAC & SQL Sandboxing
-│   └── provenance_workflow.png                  # Fig. 6: Merkle SHA-256 HMAC Provenance Ledger
+│   └── provenance_workflow.png                  # Fig. 6: Linear SHA-256 Hash-Chain Provenance Ledger
 └── tables/                                      # Structured CSV, JSON & Markdown Tables
     ├── table1_comparison.csv / .md              # Table VII: Architectural Comparison
     ├── table2_agents.csv / .md                  # Table I: Multi-Agent Directory & Invariants

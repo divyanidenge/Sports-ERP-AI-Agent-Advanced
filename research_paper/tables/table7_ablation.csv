@@ -1,6 +1,6 @@
 System Configuration / Ablation,Constraint Engine,2-Step Confirmation,Zero-Trust RBAC,Cryptographic Provenance,Task Success (%),Invalid Commits (%),Privacy Leaks (%),Mean Latency (ms)
-Full Proposed System (Ours),Enabled (C1-C8 + MUS),Enabled (10m TTL),Enabled (Student/Admin),Enabled (SHA-256 HMAC),100.0%,0.0%,0.0%,6.89 ms
-Ablation 1: No Constraint Engine,Disabled (NLP only),Enabled (10m TTL),Enabled (Student/Admin),Enabled (SHA-256 HMAC),86.7%,13.3%,0.0%,0.80 ms
-Ablation 2: No Confirmation Gate,Enabled (C1-C8 + MUS),Disabled (Auto-commit),Enabled (Student/Admin),Enabled (SHA-256 HMAC),96.7%,3.3%,0.0%,0.50 ms
-Ablation 3: No RBAC Isolation,Enabled (C1-C8 + MUS),Enabled (10m TTL),Disabled (Global Tools),Enabled (SHA-256 HMAC),90.0%,0.0%,10.0%,0.40 ms
+Full Proposed System (Ours),Enabled (C1-C8 + MUS),Enabled (10m TTL),Enabled (Student/Admin),Enabled (Linear SHA-256 Hash Chain),100.0%,0.0%,0.0%,6.89 ms
+Ablation 1: No Constraint Engine,Disabled (NLP only),Enabled (10m TTL),Enabled (Student/Admin),Enabled (Linear SHA-256 Hash Chain),86.7%,13.3%,0.0%,0.80 ms
+Ablation 2: No Confirmation Gate,Enabled (C1-C8 + MUS),Disabled (Auto-commit),Enabled (Student/Admin),Enabled (Linear SHA-256 Hash Chain),96.7%,3.3%,0.0%,0.50 ms
+Ablation 3: No RBAC Isolation,Enabled (C1-C8 + MUS),Enabled (10m TTL),Disabled (Global Tools),Enabled (Linear SHA-256 Hash Chain),90.0%,0.0%,10.0%,0.40 ms
 Ablation 4: No Provenance Ledger,Enabled (C1-C8 + MUS),Enabled (10m TTL),Enabled (Student/Admin),Disabled (Plain Rows),100.0%,0.0%,0.0%,6.84 ms

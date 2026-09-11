@@ -15,11 +15,11 @@
 
 The following claims are **100% verified** by reproducible test scripts, live database execution, and empirical benchmark logs in the codebase:
 
-1. **Deterministic Neuro-Symbolic Invariant Verification (C1–C8)**:
+1. **Deterministic Neuro-Symbolic Invariant Verification (C1â€“C8)**:
    - Evaluates eight formal domain invariants simultaneously before any state commit (`app/constraint_engine.py`).
    - Prevents double-booking collisions via SQLite partial unique indexes (`idx_active_facility_booking`).
-   - Enforces 90-day booking horizons (C4), standard campus operating intervals `06:00–09:00` and `16:00–20:00` (C3), daily student limits ($\le 2$ bookings/day, C6), and active quotas ($\le 10$ advance bookings, C7).
-   - *Test Evidence*: `tests/test_constraint_engine.py` (7/7 passed), `tests/test_conversational_bug_fixes_and_rbac.py` (line 412–530).
+   - Enforces 90-day booking horizons (C4), standard campus operating intervals `06:00â€“09:00` and `16:00â€“20:00` (C3), daily student limits ($\le 2$ bookings/day, C6), and active quotas ($\le 10$ advance bookings, C7).
+   - *Test Evidence*: `tests/test_constraint_engine.py` (7/7 passed), `tests/test_conversational_bug_fixes_and_rbac.py` (line 412â€“530).
 
 2. **Symbolic MUS/MCS Core Extraction & Conflict Relaxation**:
    - Implements deletion-based core reduction to isolate Minimal Unsatisfiable Subsets (MUS) when $\text{KB}_{\text{sports}} \cup \{R\} \models \bot$ (`app/symbolic_mus_engine.py`).
@@ -32,7 +32,7 @@ The following claims are **100% verified** by reproducible test scripts, live da
    - *Test Evidence*: `tests/test_uncertainty_harness.py` (4/4 passed).
 
 4. **Cryptographic Decision Provenance Ledger**:
-   - Implements append-only SHA-256 HMAC hash chaining $\Pi_t = \text{SHA256}(P_t \parallel \Pi_{t-1})$ with $\Pi_0 = 0^{64}$ (`app/provenance_engine.py`, `app/audit_service.py`).
+   - Implements append-only linear SHA-256 hash chaining $\Pi_t = \text{SHA256}(P_t \parallel \Pi_{t-1})$ with $\Pi_0 = 0^{64}$ (`app/provenance_engine.py`, `app/audit_service.py`).
    - Single-record and chain verification endpoints (`GET /audit/verify/{id}`) verify token integrity with 100% detection rate on simulated bit-level tampering.
    - *Test Evidence*: `tests/test_provenance_ledger.py` (4/4 passed).
 
@@ -48,8 +48,8 @@ The following claims are **100% verified** by reproducible test scripts, live da
    - *Test Evidence*: `tests/test_chat_privacy_isolation.py` (2/2 passed), `tests/test_conversational_bug_fixes_and_rbac.py` (100% passed).
 
 7. **Quantitative Multi-Paradigm Empirical Benchmark (30 Scenarios)**:
-   - Proposed Hybrid System: **100.0% Task Completion Rate (TCR)**, **0.0% Constraint Violation Rate (CVR)**, **420 tokens/query**, **5.88 ms latency**.
-   - Statistically outperforms Sandboxed Text-to-SQL (63.3% TCR, Welch's $t = 2.129$, $p < 0.05$, Cohen's $d = 0.55$) and ReAct (6.7% CVR, 1,250 tokens).
+   - Proposed Hybrid System: **93.3% Task Completion Rate (TCR)**, **0.0% Constraint Violation Rate (CVR)**, **420 tokens/query**, **7.29 ms mean latency (median 1.52 ms)**.
+   - Outperforms Sandboxed Text-to-SQL (63.3% TCR) and ReAct (6.7% CVR, 1,250 tokens). Scenario-matched paired $t$-test: $t(29) = 1.285, p = 0.209, d_z = 0.235$ (Welch: $t(29) = 1.283, p = 0.210, d = 0.331$).
    - *Test Evidence*: `benchmark_results.json`, `app/expanded_benchmark.py`, `tests/test_expanded_benchmark.py` (4/4 passed).
 
 ---
@@ -73,7 +73,7 @@ The following areas are clearly demarcated as current scope boundaries in Sectio
 | :--- | :--- | :--- |
 | **Neuro-Symbolic Contrastive Explanations** | Uses Boolean deletion-based core reduction (MUS/MCS) to explain *why* a booking failed and *what* minimal relaxation makes it valid. | Prior ERPs return static error codes or hallucinated ungrounded text. |
 | **Epistemic Risk Gating ($\Gamma(q, S)$)** | Computes continuous multi-factor confidence to gate autonomous execution, multi-candidate selection, and 2-step confirmations. | Prior chatbots either execute destructively or constantly ask for confirmation on trivial reads. |
-| **Cryptographic Provenance for AI Agents** | Links every agent-triggered or human-affirmed state mutation into a Merkle SHA-256 HMAC hash chain. | Prior AI agents log unstructured text with zero mathematical tamper evidence. |
+| **Cryptographic Provenance for AI Agents** | Links every agent-triggered or human-affirmed state mutation into a linear SHA-256 hash-chain audit ledger. | Prior AI agents log unstructured text with zero mathematical tamper evidence. |
 | **Sprint Contracts in PERR Multi-Agent Graph** | Formulates explicit acceptance criteria and rubric scoring $S(y)$ with strictly bounded replanning ($K \le 1$). | Standard ReAct agents suffer from speculative infinite loops and high token consumption. |
 
 ---
@@ -84,10 +84,10 @@ The following areas are clearly demarcated as current scope boundaries in Sectio
 - **Defensible Answer**: "SQLite with WAL mode and partial unique indexes (`idx_active_facility_booking`) was chosen as the local system of record to provide zero-latency, deterministic concurrency testing and an isolated test harness without external server overhead. In `database.py`, the ORM layer is built on standard SQLAlchemy and atomic transactions, allowing seamless migration to PostgreSQL or MySQL by modifying the connection URI string without altering constraint engine or agent logic."
 
 ### Q2: "How does the system prevent an LLM from hallucinating SQL mutations or injecting malicious statements?"
-- **Defensible Answer**: "The system uses a two-tier defense: (1) Primary execution does not use raw Text-to-SQL for transactional writes—it dispatches typed, parameterized Pydantic function calls (`create_booking_tool`, `cancel_booking_tool`) where values are bound to schema fields. (2) For analytical queries where SQL is generated, the `execute_sandboxed_sql()` interceptor strictly allows single read-only `SELECT` statements and rejects any presence of `INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, `ATTACH`, `PRAGMA`, or multi-statement delimiters with 100% verified interception."
+- **Defensible Answer**: "The system uses a two-tier defense: (1) Primary execution does not use raw Text-to-SQL for transactional writesâ€”it dispatches typed, parameterized Pydantic function calls (`create_booking_tool`, `cancel_booking_tool`) where values are bound to schema fields. (2) For analytical queries where SQL is generated, the `execute_sandboxed_sql()` interceptor strictly allows single read-only `SELECT` statements and rejects any presence of `INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, `ATTACH`, `PRAGMA`, or multi-statement delimiters with 100% verified interception."
 
 ### Q3: "Is 30 scenarios sufficient to demonstrate statistical significance in the benchmark?"
-- **Defensible Answer**: "The 30 scenarios were designed to evenly span Analytical (Tier 1), Transactional (Tier 2), and Governance/Security (Tier 3) enterprise operations. Welch's t-test comparing our hybrid approach against Text-to-SQL yielded $t = 2.129$ ($p = 0.038 < 0.05$) and Cohen's $d = 0.55$, demonstrating statistically significant performance superiority. Furthermore, the system is backed by an additional 136 automated test assertions across `pytest` and live smoke tests."
+- **Defensible Answer**: "The 30 scenarios were designed to evenly span Analytical (Tier 1), Transactional (Tier 2), and Governance/Security (Tier 3) enterprise operations. Comparing our hybrid approach against Text-to-SQL in execution latency using a scenario-matched paired t-test yielded $t(29) = 1.285$ ($p = 0.209$, $d_z = 0.235$) and independent Welch test $t(29) = 1.283$ ($p = 0.210$, $d = 0.331$), demonstrating that our multi-step symbolic safety verification incurs an additional 7.12 ms mean execution latency overhead without a statistically significant latency difference in scenario-matched testing. In task completion rate and safety compliance, the proposed system achieves 93.3% task completion (28/30) with 0% constraint violations. Furthermore, the system is backed by an additional 166 automated test assertions across `pytest`, live DB smoke tests, REST tests, conversational NLP tests, and bug fix regressions."
 
 ### Q4: "How does the system handle multi-turn ambiguity when a user has multiple bookings?"
 - **Defensible Answer**: "When ambiguity is detected ($\Gamma < 0.85$ due to candidate cardinality $> 1$), Section 7 of `query_agent.py` retrieves only confirmed active bookings matching the filter, stores them in session memory, and prompts the user with an enumerated list. In the subsequent turn, the user can provide ordinals ('option 1', 'second one') or exact booking IDs ('id 41', '#41', 'cancel 41'), which resolve against session candidates and execute safely while ignoring year patterns (e.g. 2026)."

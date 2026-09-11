@@ -8,7 +8,7 @@
 | Alternative Slot Suggestion | None | Manual Search | Static List | None | Proximity-Ranked Slot Recommendation |
 | Role-Based Access Control | Basic UI Restrictions | Mature Matrix RBAC | Session Token Only | Bypassed / Vulnerable | Zero-Trust RBAC + Student Privacy Isolation |
 | Protected Write Gates | Manual Checkbox | Approval Workflows | None | None | Two-Step Epistemic Risk Confirmation |
-| Auditability & Provenance | Plain Relational Log | Database Change Logs | Unstructured Text Log | Query History Table | Merkle-Linked SHA-256 HMAC Provenance Chain |
+| Auditability & Provenance | Plain Relational Log | Database Change Logs | Unstructured Text Log | Query History Table | Linear SHA-256 Hash-Chain Audit Ledger |
 | Concurrency & Idempotency | Database Locks | Optimistic Locking | Prone to Race Hazards | Prone to Injections | Partial Unique Index + Idempotency Keys |
-| Task Completion Rate (TCR) | 60.0% (Rigid) | 75.0% (Manual) | 90.0% (Fragile) | 63.3% (Unstable) | 100.0% (Empirically Verified) |
+| Task Completion Rate (TCR) | 60.0% (Rigid) | 75.0% (Manual) | 83.3% (Fragile) | 63.3% (Unstable) | 93.3% (Empirically Verified) |
 | Constraint Violation Rate | 12.0% | 5.0% | 6.7% | 0.0% (Read-only) | 0.0% (Zero Invariant Violations) |

@@ -3,17 +3,19 @@ app/uncertainty_harness.py
 --------------------------
 Dynamic Epistemic Uncertainty & Confidence-Gated Risk Harness.
 
-Formal Model:
+Formal Model (Equation 4):
 Calculates a continuous execution confidence score Γ(q, S) ∈ [0.0, 1.0] based on:
-1. Entity Extraction Confidence (E_conf)
-2. Semantic Ambiguity / Candidate Cardinality (A_card)
-3. Temporal Determinacy (T_det)
-4. Transactional Action Risk Weight (R_act)
-5. User Permission & Quota Safety Margin (Q_safe)
+Γ(q, S) = w_E * E_conf + w_A * A_card + w_T * T_det + w_R * R_base
+
+Additive Weights (sum to 1.00):
+- w_E = 0.15 (Entity Extraction Confidence: E_conf)
+- w_A = 0.30 (Candidate Cardinality / Disambiguation: A_card)
+- w_T = 0.20 (Temporal Determinacy: T_det)
+- w_R = 0.35 (Base Action Risk: R_base)
 
 Tiers:
-- LOW_RISK_AUTO_EXECUTE (Γ ≥ 0.85 and Read-Only)
-- MEDIUM_RISK_DISAMBIGUATION (0.50 ≤ Γ < 0.85 or Ambiguous Cardinality)
+- LOW_RISK_AUTO_EXECUTE (Γ ≥ 0.80 and Read-Only)
+- MEDIUM_RISK_DISAMBIGUATION (0.50 ≤ Γ < 0.80 or Multi-Candidate Cardinality)
 - HIGH_RISK_CONFIRMATION (Γ < 0.50 or Consequential State-Modifying Action)
 """
 

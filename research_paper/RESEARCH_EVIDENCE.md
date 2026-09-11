@@ -16,7 +16,7 @@ Every claim, metric, algorithmic formulation, and architectural component presen
 
 | Test Layer | Test Executable / Script | Assertion Count | Result | Key Subsystems Verified |
 | :--- | :--- | :---: | :---: | :--- |
-| **Full Unit & Integration Suite** | `pytest -v` | **94 / 94** | **100% PASSED** | C1–C8 Constraint Engine, MUS/MCS Solvers, Sprint Contracts, PERR Workflow, SHA-256 Ledger, SQL Sandbox, RBAC Isolation |
+| **Full Unit & Integration Suite** | `pytest -v` | **94 / 94** | **100% PASSED** | C1â€“C8 Constraint Engine, MUS/MCS Solvers, Sprint Contracts, PERR Workflow, SHA-256 Ledger, SQL Sandbox, RBAC Isolation |
 | **Live Database Smoke Tests** | `scratch/verify_complete_research_advancements_live.py` | **20 / 20** | **100% PASSED** | Live SQLite `sports_erp.db` persistence, user authentication, 2-step booking commit, tamper detection, benchmark export |
 | **API & Context Regression** | `test_api.py` | **19 / 19** | **100% PASSED** | FastAPI endpoints, JWT auth, session TTL (10m), context disarming on unrelated interruptions, administrative lockout |
 | **Conversational Query Suite** | `scratch/test_all_user_manual_queries.py` | **29 / 29** | **100% PASSED** | 18 Student intents (catalog, bookings, attendance, analytics) + 11 Admin governance intents (named resolution, audit, benchmark) |
@@ -49,7 +49,7 @@ Every claim, metric, algorithmic formulation, and architectural component presen
   2. `MEDIUM_RISK_DISAMBIGUATION` ($0.50 \le \Gamma < 0.85$ or Ambiguous Cardinality): Prompts user with numbered candidate options (e.g., multiple active bookings).
   3. `HIGH_RISK_CONFIRMATION` ($\Gamma < 0.50$ or Consequential State Modification): Arms 2-step protected confirmation in session context.
 
-### Contribution 3: Cryptographic Decision Provenance Ledger & SHA-256 HMAC Hash Chaining
+### Contribution 3: Cryptographic Decision Provenance Ledger & Linear SHA-256 Hash Chaining
 * **Source Implementation**: [`app/provenance_engine.py`](file:///c:/Users/hp/Downloads/sports_erp_code/app/provenance_engine.py), [`app/audit_service.py`](file:///c:/Users/hp/Downloads/sports_erp_code/app/audit_service.py)
 * **Formal Model**:
   Every consequential state transition commits an audit record with a chained cryptographic token $\Pi_t$:
@@ -73,10 +73,10 @@ Every claim, metric, algorithmic formulation, and architectural component presen
   3. Monolithic Function Calling (Standard LLM Agent)
   4. Proposed Hybrid Neuro-Symbolic Agentic ERP
 * **Empirical Results Summary**:
-  - Proposed Task Completion Rate: **100.0%** (vs. 63.3% Text-to-SQL, 90.0% ReAct, 93.3% Monolithic FC)
+  - Proposed Task Completion Rate: **93.3%** (vs. 63.3% Text-to-SQL, 83.3% ReAct, 86.7% Monolithic FC)
   - Constraint Violation Rate: **0.0%** (vs. 6.7% ReAct, 6.7% Monolithic FC)
-  - Mean Token Cost: **420 tokens** (vs. 1,250 ReAct, 680 Text-to-SQL, 850 Monolithic FC)
-  - Statistical Significance vs. Text-to-SQL: Welch's $t = 2.129$, $p < 0.05$, Cohen's $d = 0.55$.
+  - Mean Latency: Proposed **7.29 ms** (median 1.52 ms) vs. Text-to-SQL 0.17 ms.
+  - Statistical Comparison vs. Text-to-SQL: Paired $t(29) = 1.285$, $p = 0.209$, $d_z = 0.235$ (Welch: $t(29) = 1.283$, $p = 0.210$, $d = 0.331$).
 
 ---
 
@@ -96,15 +96,15 @@ Every claim, metric, algorithmic formulation, and architectural component presen
 
 | Research Claim / Feature | Source File in Codebase | Line Numbers / Verification Function |
 | :--- | :--- | :--- |
-| **8 Deterministic Invariants (C1–C8)** | `app/constraint_engine.py` | Lines 45–185 (`evaluate_all_constraints`) |
-| **MUS/MCS Core Reduction & Solver** | `app/symbolic_mus_engine.py` | Lines 120–310 (`extract_mus`, `compute_mcs_relaxations`) |
-| **Dynamic Uncertainty Scoring $\Gamma(q, S)$** | `app/uncertainty_harness.py` | Lines 44–145 (`evaluate_uncertainty`) |
-| **Chained SHA-256 HMAC Provenance** | `app/provenance_engine.py` | Lines 45–125 (`compute_payload_token`, `verify_provenance_chain`) |
-| **Sprint Contracts & PERR Scoring $S(y)$** | `app/sprint_contract.py` | Lines 51–140 (`evaluate_contract_satisfaction`) |
+| **8 Deterministic Invariants (C1â€“C8)** | `app/constraint_engine.py` | Lines 45â€“185 (`evaluate_all_constraints`) |
+| **MUS/MCS Core Reduction & Solver** | `app/symbolic_mus_engine.py` | Lines 120â€“310 (`extract_mus`, `compute_mcs_relaxations`) |
+| **Dynamic Uncertainty Scoring $\Gamma(q, S)$** | `app/uncertainty_harness.py` | Lines 44â€“145 (`evaluate_uncertainty`) |
+| **Linear SHA-256 Hash Chain Provenance** | `app/provenance_engine.py` | Lines 45â€“125 (`compute_payload_token`, `verify_provenance_chain`) |
+| **Sprint Contracts & PERR Scoring $S(y)$** | `app/sprint_contract.py` | Lines 51â€“140 (`evaluate_contract_satisfaction`) |
 | **Specialist Multi-Agent Swarm** | `app/agents/` | `booking_agent.py`, `availability_agent.py`, `attendance_agent.py`, `analytics_agent.py`, `governance_agent.py` |
-| **Two-Stage Intent Router** | `app/agents/orchestrator.py` | Lines 55–120 (`route_query_to_agents`) |
-| **Two-Step Affirmation & Context TTL** | `app/query_agent.py` | Lines 210–350 (Session context & pending action disarming) |
-| **Multi-Turn Disambiguation & Restore** | `app/query_agent.py` | Lines 615–770 (Candidate follow-ups & `restore_booking`) |
-| **Atomic Booking Restore & Audit** | `app/sports_service.py` | Lines 376–488 (`restore_booking`) |
-| **Sandboxed SQL Interceptor** | `app/expanded_benchmark.py` | Lines 65–110 (`execute_sandboxed_sql`) |
-| **30-Scenario Empirical Benchmark** | `app/expanded_benchmark.py` | Lines 180–360 (`run_expanded_benchmark_suite`) |
+| **Two-Stage Intent Router** | `app/agents/orchestrator.py` | Lines 55â€“120 (`route_query_to_agents`) |
+| **Two-Step Affirmation & Context TTL** | `app/query_agent.py` | Lines 210â€“350 (Session context & pending action disarming) |
+| **Multi-Turn Disambiguation & Restore** | `app/query_agent.py` | Lines 615â€“770 (Candidate follow-ups & `restore_booking`) |
+| **Atomic Booking Restore & Audit** | `app/sports_service.py` | Lines 376â€“488 (`restore_booking`) |
+| **Sandboxed SQL Interceptor** | `app/expanded_benchmark.py` | Lines 65â€“110 (`execute_sandboxed_sql`) |
+| **30-Scenario Empirical Benchmark** | `app/expanded_benchmark.py` | Lines 180â€“360 (`run_expanded_benchmark_suite`) |

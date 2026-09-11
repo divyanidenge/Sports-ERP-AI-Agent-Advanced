@@ -39,10 +39,10 @@ def validate_booking_request(
     C1: Facility existence & operational availability
     C2: Sport-facility compatibility
     C3: Campus operating schedule adherence
-    C4: Temporal validity (no past dates, within 14-day advance window)
+    C4: Temporal validity (no past dates, within 90-day advance window: MAX_ADVANCE_BOOKING_DAYS = 90)
     C5: Double-booking & slot conflict freedom
-    C6: User account standing (not blocked)
-    C7: Student advance reservation quota (max 3 active bookings)
+    C6: User account standing (not blocked) & daily quota (max 2 active bookings/day enforced in sports_service)
+    C7: Student advance reservation quota (max 10 active bookings: MAX_ACTIVE_BOOKINGS_PER_STUDENT = 10)
     C8: Role permission validity
     """
     conn = get_db_connection()

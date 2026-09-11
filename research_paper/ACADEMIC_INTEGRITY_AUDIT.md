@@ -25,15 +25,15 @@ Every numerical metric, algorithmic formulation, security claim, and baseline co
 | 4 | **Conversational Query Suite** | 29 / 29 Real-World NLP Queries Passed | `scratch/test_all_user_manual_queries.py` | `python scratch/test_all_user_manual_queries.py` | **VERIFIED DIRECTLY** | Retain in Table V and Results section. |
 | 5 | **Targeted Bug-Fix Regressions** | 4 / 4 Edge-Case Tests Passed | `scratch/test_bug_fixes_verification.py` | `python scratch/test_bug_fixes_verification.py` | **VERIFIED DIRECTLY** | Retain in Table V and Results section. |
 | 6 | **Cumulative Test Count** | 166 Total Verified Assertions | Sum of items 1–5 | Full Test Suite Execution | **DERIVED/CALCULATED** | Retain with explicit breakdown table. |
-| 7 | **Proposed System TCR** | 100.0% (30/30 scenarios) | `app/expanded_benchmark.py`, `benchmark_results.json` | `pytest tests/test_expanded_benchmark.py -v` | **VERIFIED DIRECTLY** | Retain in Table IV and Benchmark section. |
+| 7 | **Proposed System TCR** | 93.3% (28/30 scenarios) | `app/expanded_benchmark.py`, `benchmark_results.json` | `pytest tests/test_expanded_benchmark.py -v` | **VERIFIED DIRECTLY** | Retain in Table IV and Benchmark section. |
 | 8 | **Proposed System CVR** | 0.0% (0 violations) | `app/constraint_engine.py`, `app/expanded_benchmark.py` | `pytest tests/test_expanded_benchmark.py -v` | **VERIFIED DIRECTLY** | Retain in Table IV. |
-| 9 | **Proposed System Latency** | Mean: 5.88 ms (std: 14.86 ms) | `benchmark_results.json`, `app/expanded_benchmark.py` | `pytest tests/test_expanded_benchmark.py -v` | **VERIFIED DIRECTLY** | Retain in Table IV and Latency discussion. |
+| 9 | **Proposed System Latency** | Mean: 7.29 ms (median: 1.52 ms, std: 30.41 ms) | `benchmark_results.json`, `app/expanded_benchmark.py` | `pytest tests/test_expanded_benchmark.py -v` | **VERIFIED DIRECTLY** | Retain in Table IV and Latency discussion. |
 | 10 | **Proposed Token Footprint** | Estimated 420 tokens/query | `app/expanded_benchmark.py` | Two-stage router schema reduction analysis | **DERIVED/CALCULATED** | Clearly label as *estimated schema prompt footprint* rather than physical API token telemetry. |
 | 11 | **Text-to-SQL Baseline TCR** | 63.3% (19/30 scenarios) | `app/expanded_benchmark.py`, `benchmark_results.json` | Executed live against SQLite via `sanitize_text_to_sql()` | **VERIFIED DIRECTLY** | Retain in Table IV with explanation that DML writes fail safely under read-only sandbox. |
-| 12 | **Text-to-SQL Latency** | Mean: 0.10 ms (std: 0.11 ms) | `benchmark_results.json`, `app/expanded_benchmark.py` | Executed live against SQLite | **VERIFIED DIRECTLY** | Retain in Table IV. |
-| 13 | **Welch's t-test vs. SQL** | $t = 2.129, p < 0.05, d = 0.55$ | `app/expanded_benchmark.py#L93-L115` | Calculated from live latency distributions ($N=30$) | **DERIVED/CALCULATED** | Retain in statistical subsection; explicitly state $N=30$. |
-| 14 | **ReAct Baseline (TCR: 90%, CVR: 6.7%)** | Modeled in benchmark suite | `app/expanded_benchmark.py#L214-L224` | Simulated multi-turn prompt loop failure logic | **DERIVED/CALCULATED** | Explicitly state in methodology that ReAct and Monolithic FC baselines are simulated reference models based on literature criteria. |
-| 15 | **Monolithic FC Baseline (TCR: 93.3%)** | Modeled in benchmark suite | `app/expanded_benchmark.py#L198-L212` | Simulated 22-tool unpartitioned schema execution | **DERIVED/CALCULATED** | Explicitly state in methodology as reference model. |
+| 12 | **Text-to-SQL Latency** | Mean: 0.17 ms (median: 0.14 ms, std: 0.20 ms) | `benchmark_results.json`, `app/expanded_benchmark.py` | Executed live against SQLite | **VERIFIED DIRECTLY** | Retain in Table IV. |
+| 13 | **Statistical Comparison vs. SQL** | Paired $t(29) = 1.285, p = 0.209, d_z = 0.235$ (Welch: $t(29) = 1.283, p = 0.210, d = 0.331$) | `app/expanded_benchmark.py#L93-L115` | Calculated from live latency distributions ($N=30$) | **DERIVED/CALCULATED** | Report paired $t$-test as primary with Welch sensitivity; no significant difference. |
+| 14 | **ReAct Baseline (TCR: 83.3%, CVR: 6.7%)** | Modeled in benchmark suite | `app/expanded_benchmark.py#L214-L224` | Simulated multi-turn prompt loop failure logic | **DERIVED/CALCULATED** | Explicitly state in methodology that ReAct and Monolithic FC baselines are simulated reference models based on literature criteria. |
+| 15 | **Monolithic FC Baseline (TCR: 86.7%)** | Modeled in benchmark suite | `app/expanded_benchmark.py#L198-L212` | Simulated 22-tool unpartitioned schema execution | **DERIVED/CALCULATED** | Explicitly state in methodology as reference model. |
 | 16 | **Systematic Ablation Study** | 5 Configurations on 30 scenarios | `scratch/run_ablation_study.py`, `table7_ablation.csv` | `python scratch/run_ablation_study.py` | **VERIFIED DIRECTLY** | Retain in Table VI (Ablation Section). |
 | 17 | **Ablation: No Constraints** | TCR: 86.7%, Invalid Commits: 13.3% | `scratch/run_ablation_study.py` | `python scratch/run_ablation_study.py` | **VERIFIED DIRECTLY** | Retain in Table VI. |
 | 18 | **Ablation: No Confirmation** | TCR: 96.7%, Invalid Commits: 3.3% | `scratch/run_ablation_study.py` | `python scratch/run_ablation_study.py` | **VERIFIED DIRECTLY** | Retain in Table VI. |
@@ -52,10 +52,10 @@ Every numerical metric, algorithmic formulation, security claim, and baseline co
 
 ### A. Claims Safe to Retain (High Confidence, 100% Verified)
 - All 166 test assertions across 5 verification suites.
-- 100% TCR and 0% CVR for the Proposed Hybrid Architecture on the 30-scenario enterprise benchmark.
+- 93.3% TCR and 0.0% CVR for the Proposed Hybrid Architecture on the 30-scenario enterprise benchmark.
 - 63.3% TCR for Sandboxed Text-to-SQL (with exact latency measurements on SQLite).
 - Complete 5-configuration Component Ablation Study showing exact failure rates when disabling Constraints (13.3%), Confirmation (3.3%), and RBAC (10.0%).
-- Mathematical formulations for MUS/MCS core reduction, SHA-256 HMAC hash chaining, Sprint Contract reflection rubric $S(y)$, and Epistemic Confidence $\Gamma(q, S)$.
+- Mathematical formulations for MUS/MCS core reduction, linear SHA-256 hash chaining, Sprint Contract reflection rubric $S(y)$, and Epistemic Confidence $\Gamma(q, S)$.
 - All 6 architecture, state machine, and provenance figures (`research_paper/figures/`).
 
 ### B. Claims Requiring Specific Academic Framing (Derived or Modeled)

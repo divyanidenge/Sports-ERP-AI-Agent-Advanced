@@ -5,12 +5,18 @@ Cryptographic Decision Provenance Ledger for Sports ERP AI Agent System.
 
 Formal Model:
 Every consequential autonomous or human-confirmed state transition S_t -> S_{t+1}
-(e.g., booking creation, cancellation, account block/unblock) is anchored in a
-Merkle-linked, tamper-evident audit ledger:
+(e.g., booking creation, cancellation, account block/unblock) is anchored in an
+append-only, tamper-evident linear SHA-256 hash chain audit ledger (Schneier & Kelsey, 1998):
 
 Π_t = SHA256(
-    PromptHash || Action || ResourceType || ResourceID || DetailsHash || Status || PrevToken
+    user_id || action || resource_type || resource_id || details || status || PrevToken
 )
+where PrevToken = Π_{t-1}, and Π_0 = 0^64 (genesis token).
+
+Note on Cryptographic Separation:
+- The decision provenance ledger strictly uses a deterministic LINEAR SHA-256 HASH CHAIN
+  (without Merkle tree branching or HMAC secret keys).
+- User password hashing is handled separately in auth_service via PBKDF2-HMAC-SHA256.
 
 Tamper Evidence:
 - Any unauthorized post-hoc modification to an audit log row alters its local token.

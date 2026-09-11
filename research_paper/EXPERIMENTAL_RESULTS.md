@@ -16,16 +16,15 @@ Machine-Readable Output: [`benchmark_results.json`](file:///c:/Users/hp/Download
 
 | Operational Paradigm | Task Completion Rate (TCR %) | Constraint Violation Rate (CVR %) | Mean Latency (ms) | Std Dev Latency (ms) | Mean Token Cost (tokens/query) | Safety Violations |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **1. ReAct Baseline** (Yao et al., 2023) | 90.0% | 6.7% | 3.80 ms | 0.00 ms | 1,250 tokens | 0 |
-| **2. Sandboxed Text-to-SQL** (Kim et al., 2025) | 63.3% | 0.0% (Read-only) | 0.10 ms | 0.11 ms | 680 tokens | 0 (Blocked DML) |
-| **3. Monolithic Function Calling** | 93.3% | 6.7% | 1.20 ms | 0.00 ms | 850 tokens | 0 |
-| **4. Proposed Hybrid Neuro-Symbolic** (Ours) | **100.0%** | **0.0%** | **5.88 ms** | **14.86 ms** | **420 tokens** | **0** |
+| **1. ReAct Baseline** (Yao et al., 2023) | 83.3% | 6.7% | 3.80 ms | 0.00 ms | 1,250 tokens | 0 |
+| **2. Sandboxed Text-to-SQL** (Kim et al., 2025) | 63.3% | 0.0% (Read-only) | 0.17 ms | 0.20 ms | 680 tokens | 0 (Blocked DML) |
+| **3. Monolithic Function Calling** | 86.7% | 6.7% | 1.20 ms | 0.00 ms | 850 tokens | 0 |
+| **4. Proposed Hybrid Neuro-Symbolic** (Ours) | **93.3%** | **0.0%** | **7.29 ms** *(median 1.52 ms)* | **30.41 ms** | **420 tokens** | **0** |
 
-### Statistical Comparison: Proposed Hybrid vs. Sandboxed Text-to-SQL
-- **Welch's $t$-statistic**: $t = 2.129$
-- **$p$-value**: $p < 0.05$ (Statistically significant improvement in Task Completion Rate)
-- **Cohen's $d$ Effect Size**: $d = 0.55$ (Medium-to-large effect size)
-- **Mean Delta**: $+5.77\text{ ms}$ (Trade-off for complete multi-turn conversational state safety and symbolic verification)
+### Statistical Comparison: Proposed Hybrid vs. Sandboxed Text-to-SQL ($N = 30$)
+- **Scenario-Matched Paired $t$-test (Primary)**: $t(29) = 1.285, p = 0.209, d_z = 0.235$ (No statistically significant latency difference)
+- **Independent Welch Sensitivity Analysis (Secondary)**: $t(29) = 1.283, p = 0.210, d = 0.331$
+- **Mean Delta**: $+7.12\text{ ms}$ (Computational trade-off for multi-turn intent routing, dynamic uncertainty scoring, 8-rule deterministic constraint checks, and linear SHA-256 hash chaining)
 
 ---
 
@@ -36,10 +35,10 @@ Artifact: [`research_paper/tables/table7_ablation.csv`](file:///c:/Users/hp/Down
 
 | System Configuration / Ablation | Constraint Engine | 2-Step Confirmation | Zero-Trust RBAC | Cryptographic Provenance | Task Success (%) | Invalid Commits (%) | Privacy Leaks (%) | Mean Latency (ms) |
 | :--- | :--- | :--- | :--- | :--- | :---: | :---: | :---: | :---: |
-| **Full Proposed System (Ours)** | Enabled (C1–C8 + MUS) | Enabled (10m TTL) | Enabled (Student/Admin) | Enabled (SHA-256 HMAC) | **100.0%** | **0.0%** | **0.0%** | **6.89 ms** |
-| **Ablation 1: No Constraint Engine** | Disabled (NLP only) | Enabled (10m TTL) | Enabled (Student/Admin) | Enabled (SHA-256 HMAC) | 86.7% | 13.3% | 0.0% | 0.80 ms |
-| **Ablation 2: No Confirmation Gate** | Enabled (C1–C8 + MUS) | Disabled (Auto-commit) | Enabled (Student/Admin) | Enabled (SHA-256 HMAC) | 96.7% | 3.3% | 0.0% | 0.50 ms |
-| **Ablation 3: No RBAC Isolation** | Enabled (C1–C8 + MUS) | Enabled (10m TTL) | Disabled (Global Tools) | Enabled (SHA-256 HMAC) | 90.0% | 0.0% | 10.0% | 0.40 ms |
+| **Full Proposed System (Ours)** | Enabled (C1–C8 + MUS) | Enabled (10m TTL) | Enabled (Student/Admin) | Enabled (Linear SHA-256 Hash Chain) | **100.0%** | **0.0%** | **0.0%** | **6.89 ms** |
+| **Ablation 1: No Constraint Engine** | Disabled (NLP only) | Enabled (10m TTL) | Enabled (Student/Admin) | Enabled (Linear SHA-256 Hash Chain) | 86.7% | 13.3% | 0.0% | 0.80 ms |
+| **Ablation 2: No Confirmation Gate** | Enabled (C1–C8 + MUS) | Disabled (Auto-commit) | Enabled (Student/Admin) | Enabled (Linear SHA-256 Hash Chain) | 96.7% | 3.3% | 0.0% | 0.50 ms |
+| **Ablation 3: No RBAC Isolation** | Enabled (C1–C8 + MUS) | Enabled (10m TTL) | Disabled (Global Tools) | Enabled (Linear SHA-256 Hash Chain) | 90.0% | 0.0% | 10.0% | 0.40 ms |
 | **Ablation 4: No Provenance Ledger** | Enabled (C1–C8 + MUS) | Enabled (10m TTL) | Enabled (Student/Admin) | Disabled (Plain Rows) | 100.0% | 0.0% | 0.0% | 6.84 ms |
 
 ### Key Ablation Insights:
