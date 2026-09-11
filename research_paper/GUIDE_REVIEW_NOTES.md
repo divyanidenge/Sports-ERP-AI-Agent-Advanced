@@ -28,7 +28,7 @@ The following claims are **100% verified** by reproducible test scripts, live da
 
 3. **Dynamic Epistemic Uncertainty Harness ($\Gamma(q, S)$)**:
    - Computes continuous confidence scores $\Gamma(q, S) \in [0.0, 1.0]$ based on extraction confidence, candidate cardinality, temporal determinacy, action risk weights, and quota safety margins (`app/uncertainty_harness.py`).
-   - Routes actions into `LOW_RISK_AUTO_EXECUTE` ($\Gamma \ge 0.85$), `MEDIUM_RISK_DISAMBIGUATION` ($0.50 \le \Gamma < 0.85$, prompting numbered candidate choices), and `HIGH_RISK_CONFIRMATION` ($\Gamma < 0.50$ or consequential actions, arming two-step confirmation with 10-minute TTL).
+   - Routes actions into `LOW_RISK_AUTO_EXECUTE` ($\Gamma \ge 0.80$), `MEDIUM_RISK_DISAMBIGUATION` ($0.50 \le \Gamma < 0.80$, prompting numbered candidate choices), and `HIGH_RISK_CONFIRMATION` ($\Gamma < 0.50$ or consequential actions, arming two-step confirmation with 10-minute TTL).
    - *Test Evidence*: `tests/test_uncertainty_harness.py` (4/4 passed).
 
 4. **Cryptographic Decision Provenance Ledger**:
@@ -90,7 +90,7 @@ The following areas are clearly demarcated as current scope boundaries in Sectio
 - **Defensible Answer**: "The 30 scenarios were designed to evenly span Analytical (Tier 1), Transactional (Tier 2), and Governance/Security (Tier 3) enterprise operations. Comparing our hybrid approach against Text-to-SQL in execution latency using a scenario-matched paired t-test yielded $t(29) = 1.285$ ($p = 0.209$, $d_z = 0.235$) and independent Welch test $t(29) = 1.283$ ($p = 0.210$, $d = 0.331$), demonstrating that our multi-step symbolic safety verification incurs an additional 7.12 ms mean execution latency overhead without a statistically significant latency difference in scenario-matched testing. In task completion rate and safety compliance, the proposed system achieves 93.3% task completion (28/30) with 0% constraint violations. Furthermore, the system is backed by an additional 166 automated test assertions across `pytest`, live DB smoke tests, REST tests, conversational NLP tests, and bug fix regressions."
 
 ### Q4: "How does the system handle multi-turn ambiguity when a user has multiple bookings?"
-- **Defensible Answer**: "When ambiguity is detected ($\Gamma < 0.85$ due to candidate cardinality $> 1$), Section 7 of `query_agent.py` retrieves only confirmed active bookings matching the filter, stores them in session memory, and prompts the user with an enumerated list. In the subsequent turn, the user can provide ordinals ('option 1', 'second one') or exact booking IDs ('id 41', '#41', 'cancel 41'), which resolve against session candidates and execute safely while ignoring year patterns (e.g. 2026)."
+- **Defensible Answer**: "When ambiguity is detected ($\Gamma < 0.80$ due to candidate cardinality $> 1$), Section 7 of `query_agent.py` retrieves only confirmed active bookings matching the filter, stores them in session memory, and prompts the user with an enumerated list. In the subsequent turn, the user can provide ordinals ('option 1', 'second one') or exact booking IDs ('id 41', '#41', 'cancel 41'), which resolve against session candidates and execute safely while ignoring year patterns (e.g. 2026)."
 
 ---
 

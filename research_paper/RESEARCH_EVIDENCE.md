@@ -45,8 +45,8 @@ Every claim, metric, algorithmic formulation, and architectural component presen
 * **Underlying Theory**: Continuous confidence gating $\Gamma(q, S) \in [0.0, 1.0]$:
   $$\Gamma(q, S) = w_E E_{\text{conf}} + w_A A_{\text{card}} + w_T T_{\text{det}} - w_R R_{\text{act}} + w_Q Q_{\text{safe}}$$
 * **Execution Tiers**:
-  1. `LOW_RISK_AUTO_EXECUTE` ($\Gamma \ge 0.85$ and Read-Only): Immediate autonomous execution and response synthesis.
-  2. `MEDIUM_RISK_DISAMBIGUATION` ($0.50 \le \Gamma < 0.85$ or Ambiguous Cardinality): Prompts user with numbered candidate options (e.g., multiple active bookings).
+  1. `LOW_RISK_AUTO_EXECUTE` ($\Gamma \ge 0.80$ and Read-Only): Immediate autonomous execution and response synthesis.
+  2. `MEDIUM_RISK_DISAMBIGUATION` ($0.50 \le \Gamma < 0.80$ or Ambiguous Cardinality): Prompts user with numbered candidate options (e.g., multiple active bookings).
   3. `HIGH_RISK_CONFIRMATION` ($\Gamma < 0.50$ or Consequential State Modification): Arms 2-step protected confirmation in session context.
 
 ### Contribution 3: Cryptographic Decision Provenance Ledger & Linear SHA-256 Hash Chaining

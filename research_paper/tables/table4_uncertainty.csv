@@ -1,4 +1,4 @@
 Uncertainty Tier,"Confidence Score Range Î“(q,S)",Operational Trigger Conditions,Autonomous Action Protocol
-LOW_RISK_AUTO_EXECUTE,Î“ â‰¥ 0.85,"Read-only queries, single unambiguous entity match, quota safe",Autonomous tool dispatch; immediate responder synthesis.
-MEDIUM_RISK_DISAMBIGUATION,0.50 â‰¤ Î“ < 0.85,"Multi-candidate match (e.g. 2 active badminton bookings), partial slot mention",Halt execution; prompt user with enumerated candidate selection menu.
+LOW_RISK_AUTO_EXECUTE,Î“ â‰¥ 0.80,"Read-only queries, single unambiguous entity match, quota safe",Autonomous tool dispatch; immediate responder synthesis.
+MEDIUM_RISK_DISAMBIGUATION,0.50 â‰¤ Î“ < 0.80,"Multi-candidate match (e.g. 2 active badminton bookings), partial slot mention",Halt execution; prompt user with enumerated candidate selection menu.
 HIGH_RISK_CONFIRMATION,Î“ < 0.50 or Consequential,"State-modifying actions (create booking, cancellation, user block/unblock)",Arm pending confirmation in session memory; require explicit user affirmation.
