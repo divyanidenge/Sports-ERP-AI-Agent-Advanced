@@ -16,6 +16,7 @@ from app.agents.attendance_agent import AttendanceAgent
 from app.agents.analytics_agent import AnalyticsAgent
 from app.agents.governance_agent import UserGovernanceAgent
 from app.constraint_engine import validate_booking_request
+from app.sprint_contract import create_sprint_contract, evaluate_sprint_contract, SprintContract, ContractEvaluation
 
 class SubtaskPlan(BaseModel):
     subtask_id: int
@@ -30,6 +31,7 @@ class ReflectionResult(BaseModel):
     feedback: str = ""
     retry_recommended: bool = False
     details: Dict[str, Any] = Field(default_factory=dict)
+    sprint_contract: Optional[Dict[str, Any]] = None
 
 class OrchestrationResult(BaseModel):
     intent: str
@@ -260,10 +262,11 @@ class SportsOrchestrator:
         query: str,
         plan: List[SubtaskPlan],
         results: List[AgentExecutionResult],
-        current_user: Dict[str, Any]
+        current_user: Dict[str, Any],
+        contract: Optional[SprintContract] = None
     ) -> ReflectionResult:
         """
-        Reflector: Evaluates execution results against quality rubric:
+        Reflector: Evaluates execution results against formal Sprint Contract quality rubric:
         1. Tool Execution Success & Exception Freedom (Weight 0.30)
         2. Response Completeness & Goal Coverage (Weight 0.30)
         3. Constraint & Invariant Satisfaction (Weight 0.25)
@@ -277,32 +280,21 @@ class SportsOrchestrator:
                 retry_recommended=True
             )
 
-        # Check for tool errors
-        has_error = any(not r.success and "permission" not in r.message.lower() and "unavailable" not in r.message.lower() for r in results)
-        
-        # Check constraint satisfaction
-        all_constraints_valid = True
-        for r in results:
-            if "constraint_code" in r.details:
-                code = r.details["constraint_code"]
-                if code.startswith("C") and code != "C_VALID":
-                    all_constraints_valid = False
+        # Evaluate against sprint contract rubric
+        q_type = "booking" if "book" in query.lower() else ("cancellation" if "cancel" in query.lower() else "read")
+        if contract is None:
+            contract = create_sprint_contract(goal=query, query_type=q_type, allowed_agents=[t.agent_name for t in plan])
 
-        if has_error:
-            return ReflectionResult(
-                is_acceptable=False,
-                quality_score=0.4,
-                feedback=f"Execution error detected in {results[0].agent_name}: {results[0].message}",
-                retry_recommended=True
-            )
-
-        quality_score = 1.0 if (all_constraints_valid and results[-1].success) else 0.85
+        dict_results = [r.model_dump() for r in results]
+        eval_contract = evaluate_sprint_contract(contract, dict_results, tool_call_count=len(results))
 
         return ReflectionResult(
-            is_acceptable=True,
-            quality_score=quality_score,
-            feedback="Execution satisfies acceptance criteria and constraint rules.",
-            retry_recommended=False
+            is_acceptable=eval_contract.is_contract_satisfied,
+            quality_score=eval_contract.overall_score,
+            feedback=eval_contract.structured_feedback or "Execution satisfies acceptance criteria and constraint rules.",
+            retry_recommended=eval_contract.replan_required,
+            details=eval_contract.details,
+            sprint_contract=contract.model_dump()
         )
 
     def execute_workflow(
@@ -313,10 +305,15 @@ class SportsOrchestrator:
         max_iterations: int = 1
     ) -> OrchestrationResult:
         """
-        Full Planner -> Executor -> Reflector -> Responder pipeline with bounded replanning (K <= 1).
+        Full Planner -> Executor -> Reflector -> Responder pipeline with bounded replanning (K <= 1)
+        and Sprint Contracting.
         """
         active_agents = self.route_query(query, current_user.get("role", "student"))
         trace = []
+
+        q_type = "booking" if "book" in query.lower() else ("cancellation" if "cancel" in query.lower() else "read")
+        contract = create_sprint_contract(goal=query, query_type=q_type, allowed_agents=active_agents)
+        trace.append({"stage": "contract_init", "contract": contract.model_dump()})
 
         # 1. PLAN
         plan = self.plan_subtasks(query, active_agents, extracted_params)
@@ -327,15 +324,15 @@ class SportsOrchestrator:
         trace.append({"stage": "execute", "results": [r.model_dump() for r in results]})
 
         # 3. REFLECT
-        reflection = self.reflect_and_evaluate(query, plan, results, current_user)
+        reflection = self.reflect_and_evaluate(query, plan, results, current_user, contract=contract)
         trace.append({"stage": "reflect", "reflection": reflection.model_dump()})
 
         # Bounded Replan on failure (K <= 1)
         if not reflection.is_acceptable and reflection.retry_recommended and max_iterations > 0:
-            # Replan using fallback parameters
+            # Replan using fallback availability agent with contract guidance
             plan = self.plan_subtasks(query, ["AvailabilityAgent"], extracted_params)
             results = self.execute_plan(plan, current_user)
-            reflection = self.reflect_and_evaluate(query, plan, results, current_user)
+            reflection = self.reflect_and_evaluate(query, plan, results, current_user, contract=contract)
             trace.append({"stage": "replan_execute", "results": [r.model_dump() for r in results], "reflection": reflection.model_dump()})
 
         # 4. RESPOND

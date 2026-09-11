@@ -1,0 +1,9 @@
+Invariant ID,Invariant Name,Mathematical / Logical Formulation,Failure Resolution / Remediation Mechanism
+C1,Facility Active Status,exists(f) ∧ f.is_available == 1,Reject booking; report facility maintenance status.
+C2,Sport Compatibility,f.sport_id == s.id,Enforce catalog taxonomy binding; reject invalid mapping.
+C3,Operating Schedule,"slot ∈ {[06:00-09:00], [16:00-20:00]}",Reject out-of-hours slot; suggest nearest operating hours.
+C4,Temporal Bounds,today ≤ date ≤ today + 90 days,Reject past dates; reject bookings beyond 90-day horizon.
+C5,Double-Booking Guard,¬exists(b | b.facility_id==f.id ∧ b.date==d ∧ b.slot==s ∧ b.status=='confirmed'),Detect collision; trigger proximity-ranked alternative solver.
+C6,Account & Daily Limit,"u.is_blocked == 0 ∧ count_daily_active(u, date) ≤ 2",Block locked users; reject requests exceeding 2 bookings/day.
+C7,Advance Active Quota,count_total_active(u) ≤ 10,Reject booking; require user to cancel/complete past bookings.
+C8,Ownership / RBAC,u.role == 'admin' ∨ b.user_id == u.id,Strict HTTP 403 / NLP access denial; prevent cross-student tampering.

@@ -179,9 +179,18 @@ def migrate_db(conn):
         details TEXT,
         status TEXT NOT NULL,
         ip_address TEXT,
+        provenance_token TEXT,
+        prev_provenance_token TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """)
+
+    cursor.execute("PRAGMA table_info(audit_logs)")
+    audit_cols = [r["name"] if isinstance(r, sqlite3.Row) else r[1] for r in cursor.fetchall()]
+    if "provenance_token" not in audit_cols:
+        cursor.execute("ALTER TABLE audit_logs ADD COLUMN provenance_token TEXT")
+    if "prev_provenance_token" not in audit_cols:
+        cursor.execute("ALTER TABLE audit_logs ADD COLUMN prev_provenance_token TEXT")
 
     # 4. Ensure concurrency protection index on active bookings exists
     cursor.execute("""

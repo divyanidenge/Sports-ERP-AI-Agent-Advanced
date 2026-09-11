@@ -207,7 +207,23 @@ def create_booking(user_id: int, data: BookingCreate) -> BookingResponse:
             conn.close()
             return BookingResponse(**dict(existing))
 
-    # 2. Check facility availability
+    # 2. Enforce Student Daily Quota Limit (Rule C6: Max 2 bookings per day per student)
+    cursor.execute("SELECT role FROM users WHERE id = ?", (user_id,))
+    u_row = cursor.fetchone()
+    if u_row and u_row["role"] != "admin":
+        cursor.execute(
+            "SELECT COUNT(*) as cnt FROM bookings WHERE user_id = ? AND booking_date = ? AND status = 'confirmed'",
+            (user_id, data.booking_date)
+        )
+        d_cnt = cursor.fetchone()["cnt"]
+        if d_cnt >= 2:
+            conn.close()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Daily booking quota exceeded: Students can hold a maximum of 2 bookings per day on {data.booking_date}."
+            )
+
+    # 3. Check facility availability
     cursor.execute("SELECT id, name, is_available, sport_id FROM facilities WHERE id = ?", (data.facility_id,))
     fac = cursor.fetchone()
     if not fac:
@@ -356,6 +372,118 @@ def cancel_booking(booking_id: int, user_id: int, is_admin: bool = False):
     )
     
     return {"message": f"Booking #{booking_id} cancelled successfully."}
+
+def restore_booking(booking_id: int, user_id: int, is_admin: bool = False) -> Dict[str, Any]:
+    """Restores a cancelled booking after validating ownership, availability, constraints, and audit logging."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT b.id, b.user_id, b.facility_id, b.sport_id, b.booking_date, b.time_slot, b.status,
+               f.name as facility_name, f.is_available as fac_available, s.name as sport_name
+        FROM bookings b
+        LEFT JOIN facilities f ON b.facility_id = f.id
+        LEFT JOIN sports s ON b.sport_id = s.id
+        WHERE b.id = ?
+    """, (booking_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Booking #{booking_id} not found.")
+    
+    # Ownership verification
+    if not is_admin and row["user_id"] != user_id:
+        conn.close()
+        log_audit_event(
+            action="ACCESS_DENIED",
+            status="DENIED",
+            user_id=user_id,
+            resource_type="booking",
+            resource_id=booking_id,
+            details=f"Unauthorized restore attempt on booking #{booking_id} owned by user #{row['user_id']}"
+        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only restore your own bookings.")
+    
+    # State verification: Must be currently cancelled
+    if row["status"] != "cancelled":
+        conn.close()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Booking #{booking_id} is currently '{row['status']}' and cannot be restored."
+        )
+    
+    # Facility operational status
+    if row["fac_available"] == 0:
+        conn.close()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot restore booking: Facility '{row['facility_name']}' is currently inactive or closed for maintenance."
+        )
+
+    # Temporal validity: Cannot restore past dates
+    today_iso = date.today().isoformat()
+    if row["booking_date"] < today_iso:
+        conn.close()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot restore booking #{booking_id} because date '{row['booking_date']}' is in the past."
+        )
+
+    # Rule C6: Student daily limit check (max 2 active bookings per day)
+    cursor.execute("SELECT role FROM users WHERE id = ?", (row["user_id"],))
+    u_row = cursor.fetchone()
+    u_role = u_row["role"] if u_row else "student"
+    if u_role != "admin":
+        cursor.execute(
+            "SELECT COUNT(*) as cnt FROM bookings WHERE user_id = ? AND booking_date = ? AND status = 'confirmed'",
+            (row["user_id"], row["booking_date"])
+        )
+        d_cnt = cursor.fetchone()["cnt"]
+        if d_cnt >= 2:
+            conn.close()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot restore booking #{booking_id}: Daily quota of 2 confirmed bookings on {row['booking_date']} already reached."
+            )
+
+    # Check slot conflict with existing active bookings
+    cursor.execute(
+        "SELECT id FROM bookings WHERE facility_id = ? AND booking_date = ? AND time_slot = ? AND status = 'confirmed'",
+        (row["facility_id"], row["booking_date"], row["time_slot"])
+    )
+    if cursor.fetchone():
+        conn.close()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot restore booking #{booking_id}: Facility '{row['facility_name']}' is already booked on {row['booking_date']} at slot {row['time_slot']}."
+        )
+
+    # Atomic Update with concurrency guard
+    try:
+        cursor.execute("UPDATE bookings SET status = 'confirmed' WHERE id = ?", (booking_id,))
+        conn.commit()
+    except sqlite3.IntegrityError:
+        conn.rollback()
+        conn.close()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot restore booking #{booking_id}: Slot conflict collision on {row['booking_date']} at {row['time_slot']}."
+        )
+    conn.close()
+
+    # Log cryptographic provenance audit event
+    log_audit_event(
+        action="BOOKING_RESTORED",
+        user_id=user_id,
+        resource_type="booking",
+        resource_id=booking_id,
+        details=f"Booking #{booking_id} restored to confirmed status for {row['facility_name']} on {row['booking_date']} ({row['time_slot']})"
+    )
+
+    return {
+        "success": True,
+        "message": f"Booking #{booking_id} ({row['sport_name']} at {row['facility_name']} on {row['booking_date']} at {row['time_slot']}) has been restored successfully.",
+        "booking_id": booking_id
+    }
 
 # --- ATTENDANCE SERVICE ---
 def mark_attendance(data: AttendanceCreate, marked_by: int) -> AttendanceResponse:

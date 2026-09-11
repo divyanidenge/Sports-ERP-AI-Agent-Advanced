@@ -1,0 +1,6 @@
+Specialist Agent,Primary Domain Scope,Assigned Tool Set,Execution Invariants Guarded
+BookingAgent,Reservation lifecycle management,"create_booking, cancel_booking, search_my_bookings, restore_booking","C4 (Temporal), C5 (Double-booking), C6/C7 (Quota), C8 (Ownership)"
+AvailabilityAgent,Catalog lookups & schedule planning,"check_availability, find_alternative_slots, list_facilities, list_sports","C1 (Facility Active), C2 (Compatibility), C3 (Operating Hours)"
+AttendanceAgent,Check-in tracking & session metrics,"get_user_attendance, get_all_attendance, mark_attendance",RBAC Isolation (Student self-view vs Admin campus overview)
+AnalyticsAgent,Enterprise resource analytics & KPIs,"get_facility_utilization, get_peak_hours, get_popular_sports, get_advanced_analytics","Zero-mutation read isolation, aggregation precision"
+UserGovernanceAgent,Administrative user management,"list_all_users, block_user, unblock_user","Admin Authorization Check, 2-Step Confirmation on Account Lockout"

@@ -191,6 +191,8 @@ def render_sidebar():
                 "📅 Bookings",
                 "📋 Attendance",
                 "👥 User Directory",
+                "📈 Advanced Analytics & Benchmark",
+                "🛡️ Audit & Provenance Ledger",
                 "🤖 AI Assistant"
             ]
         else:
@@ -874,6 +876,141 @@ def render_ai_assistant():
                         "data": None
                     })
 
+# Page 7: Advanced Analytics & Empirical Benchmark (Admin Only)
+def render_advanced_analytics():
+    st.markdown("<div class='main-header'>📈 Advanced ERP Analytics & Empirical Benchmark</div>", unsafe_allow_html=True)
+    st.markdown("<div class='sub-header'>Statistical KPI analytics, slot utilization distributions, and four-paradigm LLM evaluation benchmark</div>", unsafe_allow_html=True)
+
+    token = st.session_state["token"]
+    user = st.session_state["user"]
+
+    if user["role"] != "admin":
+        st.error("⛔ Access Denied: This page is restricted to administrators.")
+        return
+
+    tab_kpi, tab_bench = st.tabs(["📊 ERP KPI Analytics", "🔬 Four-Paradigm Empirical Benchmark"])
+
+    with tab_kpi:
+        try:
+            resp = api.api_get_advanced_analytics(token)
+            if resp.status_code == 200:
+                data = resp.json()
+                c1, c2, c3, c4 = st.columns(4)
+                with c1:
+                    st.metric("Total Bookings", data["total_bookings"])
+                with c2:
+                    st.metric("Active Bookings", data["active_confirmed_bookings"])
+                with c3:
+                    st.metric("Cancellation Rate", f"{data['cancellation_rate']}%")
+                with c4:
+                    st.metric("Facility Utilization", f"{data['facility_utilization_rate']}%")
+
+                st.divider()
+                col_sp, col_pk = st.columns(2)
+                with col_sp:
+                    st.subheader("🏅 Sport Popularity")
+                    if data.get("popular_sports"):
+                        df_sp = pd.DataFrame(data["popular_sports"])
+                        st.dataframe(df_sp, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("No sport popularity data available.")
+                with col_pk:
+                    st.subheader("⏰ Peak Booking Hours")
+                    if data.get("peak_hours_distribution"):
+                        df_pk = pd.DataFrame(data["peak_hours_distribution"])
+                        st.dataframe(df_pk, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("No peak hours distribution data available.")
+            else:
+                st.error("Failed to load advanced analytics.")
+        except Exception as e:
+            st.error(f"Error: {e}")
+
+    with tab_bench:
+        st.subheader("🔬 30-Scenario Four-Paradigm Empirical Evaluation")
+        st.write("Evaluates ReAct, Sandboxed Read-Only Text-to-SQL, Monolithic Function Calling, and the Proposed Hybrid Architecture under identical database state.")
+
+        if st.button("🚀 Execute Comprehensive Benchmark Now", type="primary"):
+            with st.spinner("Running 30 enterprise scenarios across 4 paradigms..."):
+                try:
+                    b_resp = api.api_run_comprehensive_benchmark(token)
+                    if b_resp.status_code == 200:
+                        report = b_resp.json()
+                        st.success(f"✅ Benchmark executed successfully! Evaluated {report['total_scenarios_evaluated']} scenarios.")
+                        
+                        summary = report.get("summary_metrics", {})
+                        if summary:
+                            st.markdown("#### Summary Paradigm Metrics")
+                            rows = []
+                            for p_name, metrics in summary.items():
+                                rows.append({
+                                    "Paradigm": p_name.replace("_", " ").title(),
+                                    "Task Completion Rate (TCR %)": f"{metrics['task_completion_rate_pct']}%",
+                                    "Constraint Violation Rate (CVR %)": f"{metrics['constraint_violation_rate_pct']}%",
+                                    "Mean Latency (ms)": f"{metrics['mean_latency_ms']} ± {metrics.get('std_latency_ms', 0.0)}",
+                                    "Estimated Tokens": metrics["mean_token_cost"],
+                                    "Safety Violations": metrics["safety_violations"]
+                                })
+                            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+                        if "statistical_tests" in report:
+                            st.markdown("#### Statistical Significance (Welch's t-test)")
+                            st.json(report["statistical_tests"])
+                    else:
+                        st.error("Failed to execute benchmark.")
+                except Exception as e:
+                    st.error(f"Benchmark execution error: {e}")
+
+# Page 8: Cryptographic Audit & Provenance Ledger (Admin Only)
+def render_audit_provenance():
+    st.markdown("<div class='main-header'>🛡️ Cryptographic Decision Provenance Ledger</div>", unsafe_allow_html=True)
+    st.markdown("<div class='sub-header'>Merkle-linked, tamper-evident audit trail with SHA-256 predecessor hash chaining & cryptographic verification</div>", unsafe_allow_html=True)
+
+    token = st.session_state["token"]
+    user = st.session_state["user"]
+
+    if user["role"] != "admin":
+        st.error("⛔ Access Denied: This page is restricted to administrators.")
+        return
+
+    try:
+        resp = api.api_get_audit_logs(token, limit=50)
+        if resp.status_code == 200:
+            logs = resp.json()
+            if logs:
+                st.subheader("📜 System Audit & Provenance Trail")
+                df_logs = pd.DataFrame(logs)
+                disp_cols = ["id", "user_email", "action", "resource_type", "resource_id", "status", "created_at"]
+                cols_present = [c for c in disp_cols if c in df_logs.columns]
+                st.dataframe(df_logs[cols_present], use_container_width=True, hide_index=True)
+
+                st.divider()
+                st.subheader("🔍 Cryptographic Provenance Verifier")
+                audit_ids = [l["id"] for l in logs]
+                selected_audit_id = st.selectbox("Select Audit Record to Cryptographically Verify", audit_ids)
+
+                if st.button("🔐 Verify Record & Predecessor Hash Chain", type="primary"):
+                    v_resp = api.api_verify_provenance(token, selected_audit_id)
+                    if v_resp.status_code == 200:
+                        v_data = v_resp.json()
+                        c1, c2, c3 = st.columns(3)
+                        with c1:
+                            st.metric("Local SHA-256 Integrity", "✅ Valid" if v_data.get("local_integrity") else "❌ Invalid")
+                        with c2:
+                            st.metric("Predecessor Hash Chain", "🔗 Intact" if v_data.get("chain_intact") else "⚠️ Broken")
+                        with c3:
+                            st.metric("Tamper Status", "🟢 Clean / Untampered" if not v_data.get("tamper_detected") else "🔴 Tamper Detected")
+
+                        st.json(v_data)
+                    else:
+                        st.error("Verification check failed.")
+            else:
+                st.info("No audit logs recorded yet.")
+        else:
+            st.error("Failed to load audit logs.")
+    except Exception as e:
+        st.error(f"Error loading audit trail: {e}")
+
 # Main Application Router
 def main():
     if not st.session_state["token"] or not st.session_state["user"]:
@@ -892,6 +1029,10 @@ def main():
             render_attendance()
         elif selected_page == "👥 User Directory":
             render_users()
+        elif selected_page == "📈 Advanced Analytics & Benchmark":
+            render_advanced_analytics()
+        elif selected_page == "🛡️ Audit & Provenance Ledger":
+            render_audit_provenance()
         elif selected_page == "🤖 AI Assistant":
             render_ai_assistant()
 

@@ -33,6 +33,15 @@ def log_audit_event(
         ))
         conn.commit()
         log_id = cursor.lastrowid
+        
+        # Anchor cryptographic chained provenance
+        if log_id:
+            try:
+                from app.provenance_engine import record_provenance_for_audit
+                record_provenance_for_audit(log_id, conn=conn)
+            except Exception as pe:
+                print(f"[PROVENANCE_ERROR] Failed to anchor token for audit #{log_id}: {pe}")
+
         return log_id
     except Exception as e:
         # Audit logging should fail gracefully without crashing primary transactional flows

@@ -277,7 +277,7 @@ def find_alternative_slots(sport_name: str, booking_date: str, requested_slot: O
         "message": f"Available slots for {sport_row['name']} on {booking_date}: {', '.join(ranked_slots) if ranked_slots else 'None'}"
     }
 
-def create_booking_tool(user_id: int, sport_name: str, booking_date: str, time_slot: str, notes: str = "") -> Dict[str, Any]:
+def create_booking_tool(user_id: int, sport_name: str, booking_date: str, time_slot: str, notes: str = "", idempotency_key: Optional[str] = None) -> Dict[str, Any]:
     """Creates a booking after checking availability."""
     avail = check_availability(sport_name, booking_date, time_slot)
     if not avail["success"] or not avail["available"]:
@@ -297,12 +297,17 @@ def create_booking_tool(user_id: int, sport_name: str, booking_date: str, time_s
 
     fac_id = avail["facility_id"]
     sport_id = avail["sport_id"]
+    if not idempotency_key:
+        clean_slot = time_slot.replace(" ", "").replace(":", "")
+        idempotency_key = f"ai-book-{user_id}-{fac_id}-{booking_date}-{clean_slot}"
+
     booking_req = BookingCreate(
         facility_id=fac_id,
         sport_id=sport_id,
         booking_date=booking_date,
         time_slot=time_slot,
-        notes=notes or "Booked via AI Assistant"
+        notes=notes or "Booked via AI Assistant",
+        idempotency_key=idempotency_key
     )
     try:
         created = sports_service.create_booking(user_id, booking_req)
@@ -386,6 +391,29 @@ def cancel_booking_tool(user_id: int, role: str, sport_name: str = "", booking_i
         return {
             "success": False,
             "message": f"Cancellation error: {getattr(e, 'detail', str(e))}"
+        }
+
+def restore_booking_tool(user_id: int, role: str, booking_id: int) -> Dict[str, Any]:
+    """Restores a previously cancelled booking after validating ownership, availability, constraints, and audit logging."""
+    if not booking_id or booking_id <= 0:
+        return {
+            "success": False,
+            "message": "Please specify the booking ID you would like to restore (e.g. 'Restore booking 41')."
+        }
+    is_admin = (role == "admin")
+    try:
+        res = sports_service.restore_booking(booking_id=booking_id, user_id=user_id, is_admin=is_admin)
+        return {
+            "success": True,
+            "message": res["message"],
+            "data": res
+        }
+    except Exception as e:
+        detail = getattr(e, "detail", str(e))
+        return {
+            "success": False,
+            "message": f"Restore failed: {detail}",
+            "data": None
         }
 
 def list_sports_tool() -> Dict[str, Any]:

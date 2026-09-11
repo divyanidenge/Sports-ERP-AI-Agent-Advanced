@@ -105,19 +105,19 @@ def test_student_booking_quota_constraint(client):
     target_date_1 = (date.today() + timedelta(days=3)).isoformat()
     target_date_2 = (date.today() + timedelta(days=4)).isoformat()
     
-    # Create 10 active advance bookings
-    slots = ["06:00 - 07:00", "07:00 - 08:00", "08:00 - 09:00", "16:00 - 17:00", "17:00 - 18:00"]
+    # Create 10 active advance bookings (2 per day across 5 days to respect daily limit)
     created_ids = []
-    for sl in slots:
-        b1 = sports_service.create_booking(student_id, BookingCreate(facility_id=2, sport_id=2, booking_date=target_date_1, time_slot=sl))
-        b2 = sports_service.create_booking(student_id, BookingCreate(facility_id=2, sport_id=2, booking_date=target_date_2, time_slot=sl))
-        created_ids.extend([b1.id, b2.id])
+    for day_offset in range(3, 8):
+        d_str = (date.today() + timedelta(days=day_offset)).isoformat()
+        for sl in ["06:00 - 07:00", "07:00 - 08:00"]:
+            b = sports_service.create_booking(student_id, BookingCreate(facility_id=2, sport_id=2, booking_date=d_str, time_slot=sl))
+            created_ids.append(b.id)
 
     # Attempt 11th booking
     res = validate_booking_request(
         user_id=student_id,
         sport_name="Badminton",
-        booking_date=target_date_1,
+        booking_date=(date.today() + timedelta(days=9)).isoformat(),
         time_slot="18:00 - 19:00",
         user_role="student"
     )

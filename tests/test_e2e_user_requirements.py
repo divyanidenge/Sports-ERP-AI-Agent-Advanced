@@ -101,9 +101,17 @@ def test_req_08_to_12_conversational_booking_and_conflict_resolution(client, stu
     # Confirm booking 10 (Court 1)
     client.post("/agent/query", json={"query": "Yes", "session_id": "s3"}, headers=headers)
 
-    # Book Court 2 as well for the same slot
-    client.post("/agent/query", json={"query": "Book badminton tomorrow at 5 PM", "session_id": "s3_court2"}, headers=headers)
-    client.post("/agent/query", json={"query": "Yes", "session_id": "s3_court2"}, headers=headers)
+    # Book Court 2 as well for the same slot by another student (User #3) so all badminton courts are occupied
+    from datetime import date, timedelta
+    tomorrow_str = (date.today() + timedelta(days=1)).isoformat()
+    conn = get_db_connection()
+    c = conn.cursor()
+    c.execute(
+        "INSERT OR IGNORE INTO bookings (user_id, facility_id, sport_id, booking_date, time_slot, status) VALUES (3, 3, 2, ?, '17:00 - 18:00', 'confirmed')",
+        (tomorrow_str,)
+    )
+    conn.commit()
+    conn.close()
 
     # 11. Conflict detection & alternative slots
     q11 = client.post("/agent/query", json={"query": "Book badminton tomorrow at 5 PM", "session_id": "conflict_session"}, headers=headers).json()

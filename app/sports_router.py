@@ -92,7 +92,13 @@ def get_benchmark_evaluation(admin: dict = Depends(require_admin)):
     from app.eval_benchmark import run_sports_erp_benchmark
     return run_sports_erp_benchmark(test_user_id=admin["id"], role=admin["role"])
 
-# --- Audit Logs ---
+@router.get("/analytics/comprehensive-benchmark")
+def get_comprehensive_benchmark(admin: dict = Depends(require_admin)):
+    """Executes the 30-scenario four-paradigm comprehensive empirical benchmark."""
+    from app.expanded_benchmark import run_expanded_benchmark
+    return run_expanded_benchmark(test_user_id=admin["id"], role=admin["role"])
+
+# --- Audit Logs & Provenance ---
 @router.get("/audit-logs", response_model=List[AuditLogResponse])
 def get_audit_logs(
     user_id: Optional[int] = Query(None),
@@ -102,4 +108,10 @@ def get_audit_logs(
     admin: dict = Depends(require_admin)
 ):
     return audit_service.list_audit_logs(user_id=user_id, action=action, limit=limit, offset=offset)
+
+@router.get("/audit/verify-provenance/{audit_id}")
+def verify_audit_provenance_endpoint(audit_id: int, admin: dict = Depends(require_admin)):
+    """Verifies the chained cryptographic provenance token and tamper-status for a specific audit log record."""
+    from app.provenance_engine import verify_audit_provenance
+    return verify_audit_provenance(audit_id)
 

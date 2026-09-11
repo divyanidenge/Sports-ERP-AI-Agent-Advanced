@@ -1,0 +1,37 @@
+{
+  "full_system": {
+    "task_success_rate_pct": 100.0,
+    "invalid_commit_rate_pct": 0.0,
+    "privacy_leak_rate_pct": 0.0,
+    "mean_latency_ms": 5.5,
+    "cryptographic_audit_provenance": "Enforced (SHA-256 HMAC)"
+  },
+  "no_constraints": {
+    "task_success_rate_pct": 86.7,
+    "invalid_commit_rate_pct": 13.3,
+    "privacy_leak_rate_pct": 0.0,
+    "mean_latency_ms": 0.8,
+    "cryptographic_audit_provenance": "Enforced (SHA-256 HMAC)"
+  },
+  "no_confirmation": {
+    "task_success_rate_pct": 96.7,
+    "invalid_commit_rate_pct": 3.3,
+    "privacy_leak_rate_pct": 0.0,
+    "mean_latency_ms": 0.5,
+    "cryptographic_audit_provenance": "Enforced (SHA-256 HMAC)"
+  },
+  "no_rbac": {
+    "task_success_rate_pct": 90.0,
+    "invalid_commit_rate_pct": 0.0,
+    "privacy_leak_rate_pct": 10.0,
+    "mean_latency_ms": 0.4,
+    "cryptographic_audit_provenance": "Enforced (SHA-256 HMAC)"
+  },
+  "no_provenance": {
+    "task_success_rate_pct": 100.0,
+    "invalid_commit_rate_pct": 0.0,
+    "privacy_leak_rate_pct": 0.0,
+    "mean_latency_ms": 5.43,
+    "cryptographic_audit_provenance": "None (Plain Database Rows)"
+  }
+}

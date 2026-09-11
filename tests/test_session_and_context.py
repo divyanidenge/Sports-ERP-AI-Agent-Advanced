@@ -31,6 +31,15 @@ def test_multiturn_context_inheritance_and_booking():
     assert resp3.action_taken == "create_booking"
     assert session["pending_action"] is None
 
+    # Clean up test booking to maintain daily quota headroom across test suite
+    if resp3.data and "id" in resp3.data:
+        from app.database import get_db_connection
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute("DELETE FROM bookings WHERE id = ?", (resp3.data["id"],))
+        conn.commit()
+        conn.close()
+
 def test_confirmation_cancellation_on_no():
     """Verify that saying 'No' cleanly cancels the pending action."""
     session_id = "test_cancel_action_seq"
