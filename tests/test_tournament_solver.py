@@ -85,16 +85,73 @@ def test_rest_interval_constraint_enforcement():
                     assert abs(h1 - h2) >= 2, f"Rest violation for {team}: played at {h1}:00 and {h2}:00"
 
 def test_single_elimination_mode():
-    """Verify single elimination tournament mode scheduling."""
-    req = TournamentRequest(
+    """Verify single elimination tournament mode scheduling across complete bracket."""
+    # 4 teams -> 3 matches (2 semifinals + 1 final)
+    req4 = TournamentRequest(
         sport_name="Cricket",
         team_names=["Team 1", "Team 2", "Team 3", "Team 4"],
         court_names=["Main Ground"],
         dates=["2026-10-01", "2026-10-02"],
-        daily_slots=["06:00 - 07:00", "16:00 - 17:00"],
+        daily_slots=["06:00 - 07:00", "08:00 - 09:00", "16:00 - 17:00", "18:00 - 19:00"],
         tournament_type="single_elimination",
         check_db_conflicts=False
     )
+    res4 = solve_tournament_schedule(req4)
+    assert res4.is_feasible is True
+    assert res4.total_matches == 3  # 4 - 1 = 3 matches
+
+    # 8 teams -> 7 matches (4 quarterfinals + 2 semifinals + 1 final)
+    req8 = TournamentRequest(
+        sport_name="Badminton",
+        team_names=[f"Team {i}" for i in range(1, 9)],
+        court_names=["Badminton Court 1", "Badminton Court 2"],
+        dates=["2026-10-01", "2026-10-02"],
+        daily_slots=["06:00 - 07:00", "07:00 - 08:00", "08:00 - 09:00", "16:00 - 17:00", "17:00 - 18:00", "18:00 - 19:00", "19:00 - 20:00"],
+        min_rest_hours=1,
+        tournament_type="single_elimination",
+        check_db_conflicts=False
+    )
+    res8 = solve_tournament_schedule(req8)
+    assert res8.is_feasible is True
+    assert res8.total_matches == 7  # 8 - 1 = 7 matches
+    assert len(res8.schedule) == 7
+
+def test_20_teams_1_court_1_day_infeasible_exact_parameters():
+    """Verify Bug 2 requirement: 20 teams on 1 court in 1 day with 4h rest must return 190 matches and is_feasible=False."""
+    teams_20 = [f"Team {i}" for i in range(1, 21)]
+    req = TournamentRequest(
+        sport_name="Badminton",
+        team_names=teams_20,
+        court_names=["Badminton Court 1"],
+        dates=["2026-10-01"],
+        daily_slots=["06:00 - 07:00", "07:00 - 08:00", "08:00 - 09:00", "16:00 - 17:00", "17:00 - 18:00", "18:00 - 19:00", "19:00 - 20:00"],
+        min_rest_hours=4,
+        tournament_type="round_robin",
+        check_db_conflicts=False
+    )
     res = solve_tournament_schedule(req)
-    assert res.is_feasible is True
-    assert res.total_matches == 2  # 4 teams -> 2 opening round matches
+    assert res.is_feasible is False
+    assert res.total_matches == 190  # 20 * 19 / 2 = 190
+    assert "Insufficient court capacity" in res.infeasibility_reason
+    assert "190 matches" in res.infeasibility_reason
+    assert "7 court-slot units" in res.infeasibility_reason
+    assert res.unsat_core == ["CAPACITY_EXCEEDED"]
+
+def test_8_teams_2_courts_2_days_scheduling():
+    """Verify scheduling 8 teams on 2 courts over 2 days."""
+    teams_8 = [f"Team {i}" for i in range(1, 9)]
+    req = TournamentRequest(
+        sport_name="Badminton",
+        team_names=teams_8,
+        court_names=["Badminton Court 1", "Badminton Court 2"],
+        dates=["2026-10-01", "2026-10-02"],
+        daily_slots=["06:00 - 07:00", "07:00 - 08:00", "08:00 - 09:00", "16:00 - 17:00", "17:00 - 18:00", "18:00 - 19:00", "19:00 - 20:00"],
+        min_rest_hours=2,
+        tournament_type="round_robin",
+        check_db_conflicts=False
+    )
+    res = solve_tournament_schedule(req)
+    assert res.total_matches == 28  # 8C2 = 28
+    # 28 matches in 28 available slots
+    assert res.solving_time_ms > 0
+

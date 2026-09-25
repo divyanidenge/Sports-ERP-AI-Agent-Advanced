@@ -116,6 +116,16 @@ def api_ask_agent(token, query, session_id="default_session"):
     payload = {"query": query, "session_id": session_id}
     return requests.post(url, json=payload, headers=_get_headers(token), timeout=15)
 
+def api_ask_agent_voice(token, audio_bytes, session_id="default_session", filename="recording.wav"):
+    url = f"{API_BASE_URL}/agent/voice-query"
+    headers = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    files = {"file": (filename, audio_bytes, "audio/wav")}
+    data = {"session_id": session_id}
+    return requests.post(url, files=files, data=data, headers=headers, timeout=25)
+
+
 def api_get_audit_logs(token, limit=50):
     url = f"{API_BASE_URL}/audit-logs?limit={limit}"
     return requests.get(url, headers=_get_headers(token), timeout=10)

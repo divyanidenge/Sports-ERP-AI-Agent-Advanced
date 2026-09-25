@@ -741,10 +741,20 @@ def schedule_tournament_tool(
 
 
 def predict_facility_congestion_tool(
-    sport_name: str,
-    booking_date: str,
-    time_slot: str
+    sport_name: Optional[str] = None,
+    booking_date: Optional[str] = None,
+    time_slot: Optional[str] = None
 ) -> Dict[str, Any]:
     """Predicts facility demand and court congestion percentage using ML Gradient Boosting Regression."""
     from app.demand_forecaster import predict_facility_congestion_tool as _predict_tool
     return _predict_tool(sport_name=sport_name, booking_date=booking_date, time_slot=time_slot)
+
+
+def predict_highest_demand_facility_tool(
+    booking_date: Optional[str] = None,
+    time_slot: Optional[str] = None
+) -> Dict[str, Any]:
+    """Identifies the sports facility with the highest predicted booking demand and provides alternatives."""
+    from app.demand_forecaster import predict_highest_demand_facility_tool as _highest_tool
+    return _highest_tool(booking_date=booking_date, time_slot=time_slot)
+

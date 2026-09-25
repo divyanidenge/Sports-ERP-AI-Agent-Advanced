@@ -198,14 +198,145 @@ class FacilityDemandForecaster:
             "advisory_message": f"Expected demand for {sport_name} on {booking_date} ({time_slot}) is {pred_occupancy}% ({congestion_level})." + (f" For quieter play, consider {best_alt_slot} (~{best_alt_occ}% expected occupancy)." if pred_occupancy >= 70.0 else "")
         }
 
+    def predict_all_sports_demand(
+        self,
+        booking_date: str,
+        time_slot: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Forecasts demand across all campus sports facilities for a given date and time slot.
+        """
+        target_slot = time_slot or "18:00 - 19:00"
+        campus_sports = ["Badminton", "Basketball", "Cricket", "Football", "Swimming", "Table Tennis"]
+        
+        predictions = []
+        for sport in campus_sports:
+            pred = self.predict_congestion(sport, booking_date, target_slot)
+            predictions.append(pred)
+
+        predictions.sort(key=lambda x: x["predicted_occupancy_pct"], reverse=True)
+        highest = predictions[0]
+        
+        congested = [p for p in predictions if p["predicted_occupancy_pct"] >= 70.0]
+        moderate = [p for p in predictions if 45.0 <= p["predicted_occupancy_pct"] < 70.0]
+        low = [p for p in predictions if p["predicted_occupancy_pct"] < 45.0]
+        lowest = predictions[-1]
+
+        congested_names = ", ".join([f"{p['sport_name']} ({p['predicted_occupancy_pct']}%)" for p in congested]) if congested else "None"
+        low_names = ", ".join([f"{p['sport_name']} ({p['predicted_occupancy_pct']}%)" for p in low]) if low else "None"
+
+        lines = [
+            f"📊 **Campus Facility Demand Forecast for {booking_date} ({target_slot})**:",
+            f"• 🔥 **Highest Demand Facility:** {highest['sport_name']} ({highest['predicted_occupancy_pct']}% expected occupancy)",
+            f"• ⚠️ **Congested Facilities (≥70%):** {congested_names}",
+            f"• 🟢 **Quieter / Low Congestion Options:** {low_names}",
+            "",
+            "**Detailed Occupancy Predictions:**"
+        ]
+        for p in predictions:
+            lines.append(f"• **{p['sport_name']}:** {p['predicted_occupancy_pct']}% ({p['congestion_level']})")
+
+        msg = "\n".join(lines)
+
+        return {
+            "booking_date": booking_date,
+            "time_slot": target_slot,
+            "facilities": [
+                {
+                    "sport_name": p["sport_name"],
+                    "predicted_occupancy_pct": p["predicted_occupancy_pct"],
+                    "congestion_level": p["congestion_level"],
+                    "recommended_alternative_slot": p["recommended_alternative_slot"]
+                }
+                for p in predictions
+            ],
+            "highest_demand": {
+                "sport_name": highest["sport_name"],
+                "predicted_occupancy_pct": highest["predicted_occupancy_pct"],
+                "congestion_level": highest["congestion_level"]
+            },
+            "lowest_demand": {
+                "sport_name": lowest["sport_name"],
+                "predicted_occupancy_pct": lowest["predicted_occupancy_pct"],
+                "congestion_level": lowest["congestion_level"]
+            },
+            "highest_demand_sport": highest["sport_name"],
+            "highest_demand_occupancy_pct": highest["predicted_occupancy_pct"],
+            "congested_sports": [p["sport_name"] for p in congested],
+            "low_congestion_sports": [p["sport_name"] for p in low],
+            "predictions": predictions,
+            "advisory_message": msg
+        }
+
+    def predict_highest_demand(
+        self,
+        booking_date: str,
+        time_slot: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Pinpoints the facility with the highest predicted booking demand and provides alternatives.
+        """
+        all_res = self.predict_all_sports_demand(booking_date, time_slot)
+        highest_sport = all_res["highest_demand_sport"]
+        highest_occ = all_res["highest_demand_occupancy_pct"]
+        target_slot = all_res["time_slot"]
+        
+        top_pred = all_res["predictions"][0]
+        msg = (
+            f"🔥 **Highest Predicted Demand Facility**:\n"
+            f"• **Facility / Sport:** {highest_sport}\n"
+            f"• **Date & Slot:** {booking_date} ({target_slot})\n"
+            f"• **Predicted Occupancy:** {highest_occ}% ({top_pred['congestion_level']})\n"
+            f"• **Confidence Interval:** {top_pred['confidence_band'][0]:.1f}% – {top_pred['confidence_band'][1]:.1f}%\n"
+            f"• **Recommendation:** Expect high peak rush. For less congestion, consider booking **{top_pred['recommended_alternative_slot']}** (~{top_pred['alternative_slot_occupancy_pct']}% occupancy)."
+        )
+        return {
+            "booking_date": booking_date,
+            "time_slot": target_slot,
+            "sport_name": highest_sport,
+            "predicted_occupancy_pct": highest_occ,
+            "congestion_level": top_pred["congestion_level"],
+            "confidence_band": top_pred["confidence_band"],
+            "recommended_alternative_slot": top_pred["recommended_alternative_slot"],
+            "alternative_slot_occupancy_pct": top_pred["alternative_slot_occupancy_pct"],
+            "advisory_message": msg,
+            "all_facility_rankings": all_res["predictions"]
+        }
+
 # Global forecaster singleton
 forecaster = FacilityDemandForecaster()
 
-def predict_facility_congestion_tool(sport_name: str, booking_date: str, time_slot: str) -> Dict[str, Any]:
+def predict_facility_congestion_tool(
+    sport_name: Optional[str] = None,
+    booking_date: Optional[str] = None,
+    time_slot: Optional[str] = None
+) -> Dict[str, Any]:
     """
-    Tool function for AI agent integration.
+    Tool function for AI agent integration. Supports specific sport or all facilities forecast.
     """
-    res = forecaster.predict_congestion(sport_name, booking_date, time_slot)
+    b_date = booking_date or (date.today() + timedelta(days=1)).isoformat()
+    t_slot = time_slot or "18:00 - 19:00"
+
+    if not sport_name or sport_name.lower() in ["all", "none", "facilities", "sports", "campus"]:
+        res = forecaster.predict_all_sports_demand(b_date, t_slot)
+    else:
+        res = forecaster.predict_congestion(sport_name, b_date, t_slot)
+
+    return {
+        "success": True,
+        "data": res,
+        "message": res["advisory_message"]
+    }
+
+def predict_highest_demand_facility_tool(
+    booking_date: Optional[str] = None,
+    time_slot: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Tool function for determining the facility/sport with the highest predicted demand.
+    """
+    b_date = booking_date or (date.today() + timedelta(days=1)).isoformat()
+    res = forecaster.predict_highest_demand(b_date, time_slot)
     return {
         "success": True,
         "data": res,

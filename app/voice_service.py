@@ -12,6 +12,7 @@ Supports:
 
 import io
 import os
+import base64
 import logging
 from typing import Dict, Any, Optional, Tuple
 import speech_recognition as sr
@@ -27,6 +28,9 @@ class VoiceService:
         """
         Transcribes raw audio bytes (WAV/PCM) to text.
         """
+        if not audio_bytes or len(audio_bytes) < 10:
+            return False, "No audio data detected. Please record a voice query into the microphone."
+
         try:
             audio_file = io.BytesIO(audio_bytes)
             with sr.AudioFile(audio_file) as source:
@@ -61,9 +65,10 @@ class VoiceService:
     def process_voice_query(
         self,
         audio_bytes: bytes,
-        user_id: int,
+        user_id: int = 1,
         session_id: str = "voice_session",
-        user_role: str = "student"
+        user_role: str = "student",
+        current_user: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         End-to-end voice query handler:
@@ -78,16 +83,23 @@ class VoiceService:
                 "success": False,
                 "transcription": "",
                 "message": transcribed_text,
-                "audio_bytes": None
+                "data": None,
+                "pending_confirmation": False,
+                "suggested_slots": [],
+                "has_audio": False,
+                "audio_bytes": None,
+                "audio_base64": None
             }
 
         # 2. Existing AI Agent Pipeline Dispatch
-        current_user = {
-            "id": user_id,
-            "role": user_role,
-            "name": f"User {user_id}",
-            "email": f"user{user_id}@example.com"
-        }
+        if not current_user:
+            current_user = {
+                "id": user_id,
+                "role": user_role,
+                "name": f"User {user_id}",
+                "email": f"user{user_id}@example.com"
+            }
+            
         agent_res = process_query(
             query=transcribed_text,
             current_user=current_user,
@@ -98,13 +110,19 @@ class VoiceService:
 
         # 3. Text to Speech
         tts_ok, audio_out = self.synthesize_speech_bytes(response_text)
+        audio_b64 = base64.b64encode(audio_out).decode("utf-8") if tts_ok and audio_out else None
 
         return {
             "success": True,
             "transcription": transcribed_text,
+            "message": response_text,
+            "data": getattr(agent_res, "data", None),
+            "pending_confirmation": getattr(agent_res, "pending_confirmation", False),
+            "suggested_slots": getattr(agent_res, "suggested_slots", []),
             "agent_response": agent_res.model_dump() if hasattr(agent_res, "model_dump") else (agent_res if isinstance(agent_res, dict) else str(agent_res)),
             "response_text": response_text,
             "has_audio": tts_ok,
+            "audio_base64": audio_b64,
             "audio_bytes_length": len(audio_out) if tts_ok else 0
         }
 

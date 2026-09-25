@@ -44,6 +44,13 @@ def test_transcribe_audio_bytes_error_handling():
     assert ok is False
     assert "error" in msg.lower() or "could not" in msg.lower()
 
+def test_transcribe_empty_audio_bytes():
+    """Verify Bug 1 requirement: empty or very short audio is handled gracefully."""
+    vs = VoiceService()
+    ok, msg = vs.transcribe_audio_bytes(b"")
+    assert ok is False
+    assert "no audio data detected" in msg.lower()
+
 def test_process_voice_query_pipeline():
     """Verify end-to-end voice query handler structure."""
     vs = VoiceService()
@@ -56,3 +63,6 @@ def test_process_voice_query_pipeline():
     )
     assert "success" in res
     assert "transcription" in res
+    assert "message" in res
+    assert "has_audio" in res
+

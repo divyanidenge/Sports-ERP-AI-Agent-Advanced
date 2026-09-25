@@ -55,3 +55,37 @@ def test_predict_facility_congestion_tool_wrapper():
     assert tool_res["success"] is True
     assert "data" in tool_res
     assert "Expected demand" in tool_res["message"]
+
+def test_predict_all_sports_demand():
+    """Verify cross-facility demand forecasting across all campus sports."""
+    forecaster = FacilityDemandForecaster()
+    df = generate_synthetic_demand_dataset(days=60, seed=42)
+    forecaster.train(df)
+
+    res = forecaster.predict_all_sports_demand("2026-10-25", "18:00 - 19:00")
+    assert "predictions" in res
+    assert len(res["predictions"]) >= 6
+    assert "highest_demand_sport" in res
+    assert res["highest_demand_occupancy_pct"] > 0.0
+    assert "advisory_message" in res
+    assert "Detailed Occupancy Predictions" in res["advisory_message"]
+
+def test_predict_highest_demand_facility():
+    """Verify pinpointing the single highest-demand sport/facility."""
+    forecaster = FacilityDemandForecaster()
+    df = generate_synthetic_demand_dataset(days=60, seed=42)
+    forecaster.train(df)
+
+    res = forecaster.predict_highest_demand("2026-10-25", "18:00 - 19:00")
+    assert "sport_name" in res
+    assert "predicted_occupancy_pct" in res
+    assert "recommended_alternative_slot" in res
+    assert "Highest Predicted Demand Facility" in res["advisory_message"]
+
+def test_predict_facility_congestion_tool_cross_campus():
+    """Verify tool wrapper handles campus-wide cross-facility query."""
+    tool_res = predict_facility_congestion_tool(None, "2026-10-25", "18:00 - 19:00")
+    assert tool_res["success"] is True
+    assert "highest_demand_sport" in tool_res["data"]
+    assert "Highest Demand Facility" in tool_res["message"]
+

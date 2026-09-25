@@ -6,7 +6,7 @@
     "date_count": 1,
     "total_matches": 6,
     "is_feasible": true,
-    "solving_time_ms": 55.127
+    "solving_time_ms": 91.986
   },
   {
     "scenario": "Medium (6 Teams, 3 Courts, 2 Days)",
@@ -15,7 +15,7 @@
     "date_count": 2,
     "total_matches": 15,
     "is_feasible": true,
-    "solving_time_ms": 268.53
+    "solving_time_ms": 455.707
   },
   {
     "scenario": "Large (8 Teams, 4 Courts, 3 Days)",
@@ -24,6 +24,6 @@
     "date_count": 3,
     "total_matches": 28,
     "is_feasible": true,
-    "solving_time_ms": 1009.433
+    "solving_time_ms": 1775.841
   }
 ]

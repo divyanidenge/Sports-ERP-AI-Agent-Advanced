@@ -277,6 +277,111 @@ def extract_target_user_info(text: str, current_user: Dict[str, Any]) -> Tuple[O
         
     return None, False, True
 
+WORD_TO_NUM = {
+    "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+    "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+    "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15,
+    "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19, "twenty": 20,
+    "twenty-four": 24, "thirty": 30, "thirty-two": 32, "a": 1, "an": 1, "single": 1
+}
+
+def extract_tournament_params(text: str) -> Dict[str, Any]:
+    """
+    Robust parameter extractor for tournament scheduling natural-language queries.
+    Extracts team counts, court counts, duration/dates, rest hours, and tournament mode.
+    """
+    low = text.lower()
+    
+    # 1. Sport
+    sport = extract_sport(text) or "Badminton"
+
+    # 2. Team Count & Team Names
+    team_count = None
+    m_teams = re.search(r"\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|twelve|sixteen|twenty|thirty-two)[-\s]+teams?\b", low)
+    if m_teams:
+        val = m_teams.group(1)
+        team_count = int(val) if val.isdigit() else WORD_TO_NUM.get(val, 4)
+    else:
+        m_for = re.search(r"\bfor\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten|twelve|sixteen|twenty)[-\s]+teams?\b", low)
+        if m_for:
+            val = m_for.group(1)
+            team_count = int(val) if val.isdigit() else WORD_TO_NUM.get(val, 4)
+
+    # Check if explicit comma/and-separated team names were supplied
+    m_names = re.search(r"\bteams?\s+(?:named|called)?\s*([a-zA-Z0-9_\s,]+?)(?:\s+on|\s+in|\s+over|\s+with|\.|$)", text, re.IGNORECASE)
+    explicit_teams = []
+    if m_names and (" vs " in m_names.group(1) or "," in m_names.group(1) or " and " in m_names.group(1)):
+        raw_names = re.split(r",|\band\b", m_names.group(1))
+        explicit_teams = [t.strip() for t in raw_names if t.strip() and len(t.strip()) > 1]
+    
+    if explicit_teams and len(explicit_teams) >= 2:
+        teams = explicit_teams
+    elif team_count and team_count >= 2:
+        teams = [f"Team {i+1}" for i in range(team_count)]
+    else:
+        teams = ["Team Alpha", "Team Beta", "Team Gamma", "Team Delta"]
+
+    # 3. Court Count & Court Names
+    court_count = None
+    m_courts = re.search(r"\b(\d+|one|two|three|four|five|six|seven|eight)[-\s]+courts?\b", low)
+    if m_courts:
+        val = m_courts.group(1)
+        court_count = int(val) if val.isdigit() else WORD_TO_NUM.get(val, 1)
+    elif re.search(r"\b(?:on\s+|in\s+)?(?:a\s+)?single\s+court\b", low) or re.search(r"\b1[-\s]+court\b", low):
+        court_count = 1
+    
+    courts = [f"{sport} Court {i+1}" for i in range(court_count)] if court_count else None
+
+    # 4. Dates / Duration
+    day_count = None
+    m_days = re.search(r"\b(?:in|over|for|across)\s+(\d+|one|two|three|four|five|six|seven)[-\s]+days?\b", low)
+    if m_days:
+        val = m_days.group(1)
+        day_count = int(val) if val.isdigit() else WORD_TO_NUM.get(val, 1)
+    elif re.search(r"\b(\d+|one|two|three|four|five|six|seven)[-\s]+days?\b", low):
+        m_days2 = re.search(r"\b(\d+|one|two|three|four|five|six|seven)[-\s]+days?\b", low)
+        val = m_days2.group(1)
+        day_count = int(val) if val.isdigit() else WORD_TO_NUM.get(val, 1)
+    elif re.search(r"\b(?:in|over|for|across)\s+(?:a\s+)?single\s+day\b", low) or re.search(r"\bone[-\s]+day\b", low) or re.search(r"\b1[-\s]+day\b", low):
+        day_count = 1
+
+    start_date_str = extract_date(text) or (date.today() + timedelta(days=1)).isoformat()
+    start_dt = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+
+    if day_count and day_count >= 1:
+        dates = [(start_dt + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(day_count)]
+    else:
+        dates = [start_date_str, (start_dt + timedelta(days=1)).strftime("%Y-%m-%d")]
+
+    # 5. Rest Hours
+    rest_hours = None
+    m_rest = re.search(r"\b(\d+|one|two|three|four|five|six|seven|eight)\s*(?:hours?|hrs?)\s*(?:of\s+)?rest\b", low)
+    if m_rest:
+        val = m_rest.group(1)
+        rest_hours = int(val) if val.isdigit() else WORD_TO_NUM.get(val, 2)
+    else:
+        m_rest2 = re.search(r"\brest\s+(?:interval\s+|of\s+|time\s+)?(?:of\s+)?(\d+|one|two|three|four|five|six)\s*(?:hours?|hrs?)\b", low)
+        if m_rest2:
+            val = m_rest2.group(1)
+            rest_hours = int(val) if val.isdigit() else WORD_TO_NUM.get(val, 2)
+        else:
+            rest_hours = 2
+
+    # 6. Tournament Type
+    if any(k in low for k in ["single elimination", "knockout", "elimination"]):
+        t_type = "single_elimination"
+    else:
+        t_type = "round_robin"
+
+    return {
+        "sport_name": sport,
+        "team_names": teams,
+        "court_names": courts,
+        "dates": dates,
+        "min_rest_hours": rest_hours,
+        "tournament_type": t_type
+    }
+
 # --- MAIN ORCHESTRATOR ---
 
 def process_query(query: str, current_user: Dict[str, Any], session_id: str = "default_session") -> QueryResponse:
@@ -1291,12 +1396,16 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
             )
 
     # 11.10 Tournament Scheduling Intent (SMT Z3 Solver)
-    if any(k in q for k in ["tournament", "schedule match", "round robin", "single elimination", "match schedule", "smt schedule"]):
-        sport = extract_sport(q) or "Badminton"
-        b_date = extract_date(q) or (date.today() + timedelta(days=1)).isoformat()
-        dates = [b_date, (datetime.strptime(b_date, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")]
-        teams = ["Team Alpha", "Team Beta", "Team Gamma", "Team Delta"]
-        t_res = tools.schedule_tournament_tool(sport_name=sport, team_names=teams, dates=dates)
+    if any(k in q for k in ["tournament", "schedule match", "round robin", "single elimination", "match schedule", "smt schedule", "schedule a match", "tournament schedule", "plan tournament", "create tournament"]):
+        params = extract_tournament_params(raw_query)
+        t_res = tools.schedule_tournament_tool(
+            sport_name=params["sport_name"],
+            team_names=params["team_names"],
+            court_names=params["court_names"],
+            dates=params["dates"],
+            min_rest_hours=params["min_rest_hours"],
+            tournament_type=params["tournament_type"]
+        )
         return QueryResponse(
             intent="tournament_schedule",
             message=t_res["message"],
@@ -1305,11 +1414,36 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
         )
 
     # 11.11 Machine Learning Facility Demand / Congestion Forecasting Intent
-    if any(k in q for k in ["demand forecast", "predict congestion", "congestion forecast", "how busy", "crowd forecast", "forecast demand", "congestion prediction"]):
-        sport = extract_sport(q) or "Badminton"
-        b_date = extract_date(q) or (date.today() + timedelta(days=1)).isoformat()
-        t_slot = extract_time_slot(q) or "18:00 - 19:00"
-        c_res = tools.predict_facility_congestion_tool(sport_name=sport, booking_date=b_date, time_slot=t_slot)
+    is_forecast_query = (
+        any(k in q for k in [
+            "demand forecast", "forecast demand", "predict demand", "facility demand",
+            "predict congestion", "congestion forecast", "congestion prediction",
+            "likely to be congested", "will be congested", "expected congestion",
+            "highest booking demand", "highest predicted demand", "highest demand",
+            "busiest tomorrow", "will be busiest", "most busy", "busiest facility", "busiest sport",
+            "expected facility occupancy", "facility occupancy", "occupancy forecast",
+            "how busy", "crowd forecast", "predict crowd", "congestion for", "forecast badminton",
+            "predict badminton demand", "predict football demand", "predict cricket demand"
+        ]) or (
+            any(w in q for w in ["predict", "forecast", "expected", "likely", "busiest", "congested", "congestion"])
+            and any(w in q for w in ["demand", "congestion", "occupancy", "crowd", "busy", "facility", "facilities"])
+        )
+    )
+
+    if is_forecast_query:
+        sport = extract_sport(q)
+        b_date = extract_date_explicit(q) or (date.today() + timedelta(days=1)).isoformat()
+        t_slot = extract_time_slot(q)
+        
+        is_highest_query = any(k in q for k in ["highest", "busiest", "most busy", "top demand", "peak demand"])
+        
+        if is_highest_query:
+            c_res = tools.predict_highest_demand_facility_tool(booking_date=b_date, time_slot=t_slot)
+        elif sport:
+            c_res = tools.predict_facility_congestion_tool(sport_name=sport, booking_date=b_date, time_slot=t_slot)
+        else:
+            c_res = tools.predict_facility_congestion_tool(sport_name=None, booking_date=b_date, time_slot=t_slot)
+
         return QueryResponse(
             intent="demand_forecasting",
             message=c_res["message"],
@@ -1319,7 +1453,7 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
 
     # --- 12. QUERY: LIST SPORTS / LIST FACILITIES ---
     if any(re.search(pat, q) for pat in [
-        r"\b(?:which|what)\s+sports?(?:\s+are\s+available|\s+can\s+i\s+play)?\b",
+        r"\b(?:which|what)\s+sports?\s+(?:are\s+available|can\s+i\s+play|do\s+we\s+have|are\s+there)\b",
         r"\b(?:list|show|view|get|display)\s+(?:available\s+)?sports?\b",
         r"\bavailable\s+sports?\b",
         r"\bsports?\s+(?:are\s+)?available\b",

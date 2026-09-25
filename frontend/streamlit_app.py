@@ -786,6 +786,13 @@ def render_ai_assistant():
         avatar = "🤖" if msg["role"] == "assistant" else "👤"
         with st.chat_message(msg["role"], avatar=avatar):
             st.write(msg["content"])
+            if msg.get("audio_base64"):
+                import base64
+                try:
+                    raw_mp3 = base64.b64decode(msg["audio_base64"])
+                    st.audio(raw_mp3, format="audio/mp3")
+                except Exception:
+                    pass
             if msg.get("data"):
                 data = msg["data"]
                 if isinstance(data, list) and len(data) > 0 and isinstance(data[0], dict):
@@ -813,8 +820,57 @@ def render_ai_assistant():
             if slot_cols[idx].button(f"⏰ {sl}", key=f"slot_btn_{idx}", use_container_width=True):
                 clicked_prompt = f"Book {sl}"
 
-    # Handle Input
-    user_input = st.chat_input("Type naturally: 'Show my bookings', 'Book a badminton slot tomorrow at 5 PM', 'Cancel my booking', 'Show my attendance'...")
+    # Voice Input / Microphone Option (Prominent and Accessible)
+    st.markdown("##### 🎙️ Voice Assistant (Browser Microphone)")
+    try:
+        voice_audio = st.audio_input("Record Voice Query (e.g. 'Show my bookings', 'Which facility will be busiest tomorrow?')", key=f"voice_mic_{user_id}")
+        if voice_audio is not None:
+            audio_bytes = voice_audio.getvalue()
+            import hashlib
+            audio_hash = hashlib.md5(audio_bytes).hexdigest()
+            if st.session_state.get(f"last_audio_{user_id}") != audio_hash:
+                st.session_state[f"last_audio_{user_id}"] = audio_hash
+                if len(audio_bytes) > 200:
+                    with st.spinner("🎙️ Transcribing voice audio and consulting AI Assistant..."):
+                        try:
+                            v_resp = api.api_ask_agent_voice(token, audio_bytes, session_id=session_id)
+                            if v_resp.status_code == 200:
+                                v_data = v_resp.json()
+                                if not v_data.get("success", True) and not v_data.get("transcription"):
+                                    err_msg = v_data.get("message", "Could not understand audio. Please speak clearly.")
+                                    st.warning(f"🎙️ {err_msg}")
+                                else:
+                                    trans_text = v_data.get("transcription", "")
+                                    reply_msg = v_data.get("message", "Voice request processed.")
+                                    payload = v_data.get("data")
+                                    audio_b64 = v_data.get("audio_base64")
+
+                                    st.session_state["pending_confirmation"] = v_data.get("pending_confirmation", False)
+                                    st.session_state["suggested_slots"] = v_data.get("suggested_slots") or []
+
+                                    messages.append({
+                                        "role": "user",
+                                        "content": f"🎙️ [Voice]: \"{trans_text}\"",
+                                        "data": None
+                                    })
+                                    messages.append({
+                                        "role": "assistant",
+                                        "content": reply_msg,
+                                        "data": payload,
+                                        "audio_base64": audio_b64
+                                    })
+                                    st.rerun()
+                            else:
+                                st.error(f"Voice Query Failed (HTTP {v_resp.status_code}): {v_resp.text}")
+                        except Exception as e:
+                            st.error(f"Voice service communication error: {e}")
+                else:
+                    st.warning("Audio recording too short or empty. Please speak clearly into the microphone.")
+    except Exception as mic_err:
+        st.info(f"Microphone widget status: {mic_err}")
+
+    # Handle Text Input
+    user_input = st.chat_input("Type naturally: 'Show my bookings', 'Schedule tournament for 8 teams', 'Which facility will be busiest tomorrow?'...")
     prompt_to_send = clicked_prompt or user_input
 
     if prompt_to_send:
@@ -875,6 +931,7 @@ def render_ai_assistant():
                         "content": f"⚠️ {err_msg}",
                         "data": None
                     })
+
 
 # Page 7: Advanced Analytics & Empirical Benchmark (Admin Only)
 def render_advanced_analytics():

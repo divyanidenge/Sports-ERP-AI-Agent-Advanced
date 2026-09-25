@@ -1,30 +1,30 @@
 {
   "engine": "gTTS / pyttsx3",
-  "average_tts_latency_ms": 380.62,
+  "average_tts_latency_ms": 635.34,
   "results": [
     {
       "phrase": "Show my active court bookings.",
       "success": true,
       "audio_size_bytes": 20544,
-      "tts_latency_ms": 348.26
+      "tts_latency_ms": 593.46
     },
     {
       "phrase": "Which sports facilities are available today?",
       "success": true,
       "audio_size_bytes": 25920,
-      "tts_latency_ms": 623.45
+      "tts_latency_ms": 617.07
     },
     {
       "phrase": "How busy will badminton courts be tomorrow at 5 PM?",
       "success": true,
       "audio_size_bytes": 34368,
-      "tts_latency_ms": 283.04
+      "tts_latency_ms": 651.92
     },
     {
       "phrase": "Your badminton court booking is confirmed for tomorrow.",
       "success": true,
       "audio_size_bytes": 29952,
-      "tts_latency_ms": 267.74
+      "tts_latency_ms": 678.92
     }
   ]
 }

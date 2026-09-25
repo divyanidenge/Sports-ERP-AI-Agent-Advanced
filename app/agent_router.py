@@ -25,7 +25,8 @@ async def voice_query_endpoint(
         audio_bytes=audio_bytes,
         user_id=current_user.get("id", 1),
         session_id=session_id,
-        user_role=current_user.get("role", "student")
+        user_role=current_user.get("role", "student"),
+        current_user=current_user
     )
 
 @router.post("/tournament/schedule", response_model=TournamentSolverResult)
