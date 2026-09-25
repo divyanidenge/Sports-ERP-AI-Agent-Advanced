@@ -1290,6 +1290,33 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
                 data={"bookings": book, "attendance": att}
             )
 
+    # 11.10 Tournament Scheduling Intent (SMT Z3 Solver)
+    if any(k in q for k in ["tournament", "schedule match", "round robin", "single elimination", "match schedule", "smt schedule"]):
+        sport = extract_sport(q) or "Badminton"
+        b_date = extract_date(q) or (date.today() + timedelta(days=1)).isoformat()
+        dates = [b_date, (datetime.strptime(b_date, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")]
+        teams = ["Team Alpha", "Team Beta", "Team Gamma", "Team Delta"]
+        t_res = tools.schedule_tournament_tool(sport_name=sport, team_names=teams, dates=dates)
+        return QueryResponse(
+            intent="tournament_schedule",
+            message=t_res["message"],
+            success=t_res["success"],
+            data=t_res["data"]
+        )
+
+    # 11.11 Machine Learning Facility Demand / Congestion Forecasting Intent
+    if any(k in q for k in ["demand forecast", "predict congestion", "congestion forecast", "how busy", "crowd forecast", "forecast demand", "congestion prediction"]):
+        sport = extract_sport(q) or "Badminton"
+        b_date = extract_date(q) or (date.today() + timedelta(days=1)).isoformat()
+        t_slot = extract_time_slot(q) or "18:00 - 19:00"
+        c_res = tools.predict_facility_congestion_tool(sport_name=sport, booking_date=b_date, time_slot=t_slot)
+        return QueryResponse(
+            intent="demand_forecasting",
+            message=c_res["message"],
+            success=c_res["success"],
+            data=c_res["data"]
+        )
+
     # --- 12. QUERY: LIST SPORTS / LIST FACILITIES ---
     if any(re.search(pat, q) for pat in [
         r"\b(?:which|what)\s+sports?(?:\s+are\s+available|\s+can\s+i\s+play)?\b",

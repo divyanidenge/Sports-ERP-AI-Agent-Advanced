@@ -1,0 +1,62 @@
+{
+  "error_rate_0pct": {
+    "always_confirm": {
+      "avg_dialog_turns": 2.0,
+      "total_confirmations": 50,
+      "accidental_mutation_rate_pct": 0.0,
+      "task_completion_rate_pct": 100.0
+    },
+    "never_confirm": {
+      "avg_dialog_turns": 1.0,
+      "total_confirmations": 0,
+      "accidental_mutation_rate_pct": 0.0,
+      "task_completion_rate_pct": 100.0
+    },
+    "risk_adaptive": {
+      "avg_dialog_turns": 1.5,
+      "total_confirmations": 25,
+      "accidental_mutation_rate_pct": 0.0,
+      "task_completion_rate_pct": 100.0
+    }
+  },
+  "error_rate_10pct": {
+    "always_confirm": {
+      "avg_dialog_turns": 2.04,
+      "total_confirmations": 50,
+      "accidental_mutation_rate_pct": 0.0,
+      "task_completion_rate_pct": 100.0
+    },
+    "never_confirm": {
+      "avg_dialog_turns": 1.0,
+      "total_confirmations": 0,
+      "accidental_mutation_rate_pct": 8.0,
+      "task_completion_rate_pct": 92.0
+    },
+    "risk_adaptive": {
+      "avg_dialog_turns": 1.54,
+      "total_confirmations": 25,
+      "accidental_mutation_rate_pct": 0.0,
+      "task_completion_rate_pct": 100.0
+    }
+  },
+  "error_rate_25pct": {
+    "always_confirm": {
+      "avg_dialog_turns": 2.04,
+      "total_confirmations": 50,
+      "accidental_mutation_rate_pct": 0.0,
+      "task_completion_rate_pct": 100.0
+    },
+    "never_confirm": {
+      "avg_dialog_turns": 1.0,
+      "total_confirmations": 0,
+      "accidental_mutation_rate_pct": 14.0,
+      "task_completion_rate_pct": 86.0
+    },
+    "risk_adaptive": {
+      "avg_dialog_turns": 1.54,
+      "total_confirmations": 25,
+      "accidental_mutation_rate_pct": 0.0,
+      "task_completion_rate_pct": 100.0
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "test_mae": 7.469,
+  "test_rmse": 9.865,
+  "baseline_mae": 10.768,
+  "baseline_rmse": 13.951,
+  "mae_improvement_pct": 30.64
+}

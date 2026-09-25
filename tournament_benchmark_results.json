@@ -1,0 +1,29 @@
+[
+  {
+    "scenario": "Small (4 Teams, 2 Courts, 1 Day)",
+    "team_count": 4,
+    "court_count": 2,
+    "date_count": 1,
+    "total_matches": 6,
+    "is_feasible": true,
+    "solving_time_ms": 55.127
+  },
+  {
+    "scenario": "Medium (6 Teams, 3 Courts, 2 Days)",
+    "team_count": 6,
+    "court_count": 3,
+    "date_count": 2,
+    "total_matches": 15,
+    "is_feasible": true,
+    "solving_time_ms": 268.53
+  },
+  {
+    "scenario": "Large (8 Teams, 4 Courts, 3 Days)",
+    "team_count": 8,
+    "court_count": 4,
+    "date_count": 3,
+    "total_matches": 28,
+    "is_feasible": true,
+    "solving_time_ms": 1009.433
+  }
+]

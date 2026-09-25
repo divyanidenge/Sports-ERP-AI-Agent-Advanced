@@ -709,3 +709,42 @@ def get_cancellation_statistics_tool(user_id: Optional[int] = None, role: str = 
             "cancellation_rate": analytics.cancellation_rate
         }
     }
+
+
+def schedule_tournament_tool(
+    sport_name: str,
+    team_names: List[str],
+    dates: List[str],
+    court_names: Optional[List[str]] = None,
+    daily_slots: Optional[List[str]] = None,
+    min_rest_hours: int = 2,
+    tournament_type: str = "round_robin"
+) -> Dict[str, Any]:
+    """Generates an optimal, constraint-verified tournament match schedule using Microsoft Z3 SMT Solver."""
+    from app.tournament_solver import TournamentRequest, solve_tournament_schedule
+    req = TournamentRequest(
+        sport_name=sport_name,
+        team_names=team_names,
+        court_names=court_names,
+        dates=dates,
+        daily_slots=daily_slots,
+        min_rest_hours=min_rest_hours,
+        tournament_type=tournament_type,
+        check_db_conflicts=True
+    )
+    res = solve_tournament_schedule(req)
+    return {
+        "success": res.is_feasible,
+        "message": res.summary if res.is_feasible else (res.infeasibility_reason or res.summary),
+        "data": res.model_dump()
+    }
+
+
+def predict_facility_congestion_tool(
+    sport_name: str,
+    booking_date: str,
+    time_slot: str
+) -> Dict[str, Any]:
+    """Predicts facility demand and court congestion percentage using ML Gradient Boosting Regression."""
+    from app.demand_forecaster import predict_facility_congestion_tool as _predict_tool
+    return _predict_tool(sport_name=sport_name, booking_date=booking_date, time_slot=time_slot)

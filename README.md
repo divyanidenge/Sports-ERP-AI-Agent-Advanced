@@ -172,14 +172,51 @@ Expected output:
 
 ---
 
-## 🔑 Optional: Google Gemini API Key
+## 🔬 Research & Experimental Modules
 
-The core NLP intent parser, booking engine, and administrative actions work 100% locally with zero external API dependencies. 
+### 1. Z3 SMT Combinatorial Tournament Scheduler (`app/tournament_solver.py`)
+- **Engine**: Microsoft Z3 SMT Solver with bounded integer arithmetic.
+- **Formulation**: Eliminates pairwise court overlap, team concurrent scheduling, and enforces minimum physical rest intervals ($\ge 2$ hours).
+- **Unsat Core Reporting**: Pinpoints exact conflicting constraints (court capacity, team rest interval bottlenecks) when a tournament cannot be scheduled.
 
-If you would like advanced open-ended reasoning for free-form questions in the AI Assistant:
-1. Get a free API key from [Google AI Studio](https://aistudio.google.com/app/apikey).
-2. Set it in `backend/.env`:
-   ```env
-   GEMINI_API_KEY=your_gemini_api_key_here
-   ```
-3. Restart the backend server.
+### 2. Machine Learning Facility Demand Forecasting (`app/demand_forecaster.py`, `app/demand_dataset.py`)
+- **Dataset**: `[SYNTHETIC DATASET — RESEARCH EXPERIMENTATION ONLY]` 20,440 hourly records across 365 days generated using domain heuristics (diurnal morning/evening peaks, exam schedules, weather).
+- **Model**: Gradient Boosting Regressor (80/20 train/test chronological split).
+- **Empirical Results**: MAE: 7.47% occupancy (vs Historical Mean Baseline MAE: 10.77%), achieving a **30.64% relative MAE improvement**.
+- **Advisory Output**: Provides congestion classification and low-demand alternative slot recommendations.
+
+### 3. Optional Voice Interaction Pipeline (`app/voice_service.py`)
+- **STT**: `SpeechRecognition` library handling audio input.
+- **TTS**: `gTTS` (Google Text-to-Speech) with `pyttsx3` offline fallback.
+- **Architecture**: Directly reuses existing agent reasoning and verification pipeline without modifying backend business logic.
+
+---
+
+## 📊 Reproducible Experimental Benchmarks
+
+Run the standalone empirical benchmarks with the following commands:
+
+```bash
+# 1. Z3 SMT Tournament Scheduling Benchmark
+python tests/benchmark_tournament.py
+
+# 2. Machine Learning Demand Forecasting Benchmark
+python tests/benchmark_forecasting.py
+
+# 3. Confirmation Policy Simulation Benchmark [50 Scenarios]
+python tests/benchmark_confirmation_policies.py
+
+# 4. Voice Interaction Latency & Pipeline Benchmark
+python tests/benchmark_voice.py
+
+# 5. Full Unit & Integration Test Suite (106 Tests)
+pytest -v
+```
+
+---
+
+## 🛡️ Research Integrity & Ethical Disclosures
+
+1. **Synthetic Datasets**: All demand forecasting models are evaluated strictly on synthetic facility usage logs (`app/demand_dataset.py`). No real-world student personal health or athletic tracking data was collected.
+2. **Simulation Benchmarks**: The confirmation policy evaluations (`tests/benchmark_confirmation_policies.py`) are automated algorithmic simulations across 50 scripted dialog scenarios. No human-subject clinical or behavioral trials were conducted.
+3. **Reproducibility**: All benchmark scripts log deterministic JSON metrics (`tournament_benchmark_results.json`, `forecast_benchmark_results.json`, `confirmation_benchmark_results.json`, `voice_benchmark_results.json`) directly into the repository.
