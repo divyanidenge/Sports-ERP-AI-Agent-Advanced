@@ -49,6 +49,8 @@ class FacilityCreate(BaseModel):
     location: str
     capacity: int = 10
     is_available: int = 1
+    open_time: str = "06:00"
+    close_time: str = "22:00"
 
 class FacilityResponse(BaseModel):
     id: int
@@ -58,6 +60,8 @@ class FacilityResponse(BaseModel):
     location: str
     capacity: int
     is_available: int
+    open_time: str
+    close_time: str
     created_at: Optional[str] = None
 
 # --- Bookings Models ---
@@ -65,9 +69,16 @@ class BookingCreate(BaseModel):
     facility_id: int
     sport_id: int
     booking_date: str # YYYY-MM-DD
-    time_slot: str    # e.g., '06:00 - 07:00'
+    start_time: str   # e.g., '06:00'
+    end_time: str     # e.g., '07:00'
     notes: Optional[str] = ""
     idempotency_key: Optional[str] = None
+    target_user_id: Optional[int] = None
+
+class BookingReschedule(BaseModel):
+    new_booking_date: str
+    new_start_time: str
+    new_end_time: str
 
 class BookingResponse(BaseModel):
     id: int

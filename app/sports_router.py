@@ -3,7 +3,7 @@ from typing import List, Optional
 from app.models import (
     SportCreate, SportResponse,
     FacilityCreate, FacilityResponse,
-    BookingCreate, BookingResponse,
+    BookingCreate, BookingResponse, BookingReschedule,
     AttendanceCreate, AttendanceResponse,
     DashboardStats, AdvancedAnalytics, AuditLogResponse
 )
@@ -51,12 +51,20 @@ def get_bookings(
 
 @router.post("/bookings", response_model=BookingResponse)
 def make_booking(data: BookingCreate, current_user: dict = Depends(get_current_user)):
-    return sports_service.create_booking(current_user["id"], data)
+    booking_user_id = current_user["id"]
+    if current_user.get("role") == "admin" and data.target_user_id is not None:
+        booking_user_id = data.target_user_id
+    return sports_service.create_booking(booking_user_id, data)
 
 @router.delete("/bookings/{booking_id}")
 def cancel_booking_endpoint(booking_id: int, current_user: dict = Depends(get_current_user)):
     is_admin = (current_user["role"] == "admin")
     return sports_service.cancel_booking(booking_id, current_user["id"], is_admin=is_admin)
+
+@router.patch("/bookings/{booking_id}/reschedule", response_model=BookingResponse)
+def reschedule_booking_endpoint(booking_id: int, data: BookingReschedule, current_user: dict = Depends(get_current_user)):
+    is_admin = (current_user["role"] == "admin")
+    return sports_service.reschedule_booking(booking_id, current_user["id"], data, is_admin)
 
 # --- Attendance ---
 @router.get("/attendance", response_model=List[AttendanceResponse])

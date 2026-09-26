@@ -6,7 +6,7 @@ from app.database import get_db_connection
 from app.models import (
     SportCreate, SportResponse,
     FacilityCreate, FacilityResponse,
-    BookingCreate, BookingResponse,
+    BookingCreate, BookingResponse, BookingReschedule,
     AttendanceCreate, AttendanceResponse,
     DashboardStats, AdvancedAnalytics
 )
@@ -117,7 +117,7 @@ def list_facilities() -> List[FacilityResponse]:
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT f.id, f.name, f.sport_id, s.name as sport_name, f.location, f.capacity, f.is_available, f.created_at
+        SELECT f.id, f.name, f.sport_id, s.name as sport_name, f.location, f.capacity, f.is_available, f.open_time, f.close_time, f.created_at
         FROM facilities f
         LEFT JOIN sports s ON f.sport_id = s.id
         ORDER BY f.id ASC
@@ -137,14 +137,14 @@ def create_facility(data: FacilityCreate) -> FacilityResponse:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Referenced sport does not exist.")
     
     cursor.execute(
-        "INSERT INTO facilities (name, sport_id, location, capacity, is_available) VALUES (?, ?, ?, ?, ?)",
-        (data.name.strip(), data.sport_id, data.location.strip(), data.capacity, data.is_available)
+        "INSERT INTO facilities (name, sport_id, location, capacity, is_available, open_time, close_time) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (data.name.strip(), data.sport_id, data.location.strip(), data.capacity, data.is_available, data.open_time, data.close_time)
     )
     conn.commit()
     fac_id = cursor.lastrowid
     
     cursor.execute("""
-        SELECT f.id, f.name, f.sport_id, s.name as sport_name, f.location, f.capacity, f.is_available, f.created_at
+        SELECT f.id, f.name, f.sport_id, s.name as sport_name, f.location, f.capacity, f.is_available, f.open_time, f.close_time, f.created_at
         FROM facilities f
         LEFT JOIN sports s ON f.sport_id = s.id
         WHERE f.id = ?
@@ -186,6 +186,15 @@ def toggle_facility_status(facility_id: int):
 
 # --- BOOKINGS SERVICE ---
 def create_booking(user_id: int, data: BookingCreate) -> BookingResponse:
+    today_iso = date.today().isoformat()
+    if data.booking_date < today_iso:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot create bookings for past dates."
+        )
+        
+    computed_time_slot = f"{data.start_time} - {data.end_time}"
+    
     conn = get_db_connection()
     cursor = conn.cursor()
     
@@ -224,7 +233,7 @@ def create_booking(user_id: int, data: BookingCreate) -> BookingResponse:
             )
 
     # 3. Check facility availability
-    cursor.execute("SELECT id, name, is_available, sport_id FROM facilities WHERE id = ?", (data.facility_id,))
+    cursor.execute("SELECT id, name, is_available, sport_id, open_time, close_time FROM facilities WHERE id = ?", (data.facility_id,))
     fac = cursor.fetchone()
     if not fac:
         conn.close()
@@ -233,31 +242,48 @@ def create_booking(user_id: int, data: BookingCreate) -> BookingResponse:
         conn.close()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Facility is currently marked unavailable for booking.")
     
-    # 3. Check conflict (Pre-check)
-    cursor.execute(
-        "SELECT id FROM bookings WHERE facility_id = ? AND booking_date = ? AND time_slot = ? AND status = 'confirmed'",
-        (data.facility_id, data.booking_date, data.time_slot)
-    )
-    if cursor.fetchone():
+    if data.start_time < fac["open_time"] or data.end_time > fac["close_time"]:
         conn.close()
-        log_audit_event(
-            action="BOOKING_CONFLICT",
-            status="FAILED",
-            user_id=user_id,
-            resource_type="facility",
-            resource_id=data.facility_id,
-            details=f"Facility #{data.facility_id} is already booked on {data.booking_date} at slot {data.time_slot}"
-        )
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, 
-            detail=f"Facility is already booked for date {data.booking_date} at slot {data.time_slot}."
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Requested slot {data.start_time} - {data.end_time} is outside facility operating hours ({fac['open_time']} - {fac['close_time']})."
         )
+    
+    if data.start_time >= data.end_time:
+        conn.close()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Start time must be before end time.")
+
+    # 4. Check conflict (Overlap Logic)
+    cursor.execute(
+        "SELECT id, time_slot FROM bookings WHERE facility_id = ? AND booking_date = ? AND status = 'confirmed'",
+        (data.facility_id, data.booking_date)
+    )
+    existing_bookings = cursor.fetchall()
+    for eb in existing_bookings:
+        try:
+            eb_start, eb_end = eb["time_slot"].split(" - ")
+            if data.start_time < eb_end and data.end_time > eb_start:
+                conn.close()
+                log_audit_event(
+                    action="BOOKING_CONFLICT",
+                    status="FAILED",
+                    user_id=user_id,
+                    resource_type="facility",
+                    resource_id=data.facility_id,
+                    details=f"Facility #{data.facility_id} overlaps with existing booking {eb['time_slot']} on {data.booking_date}"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, 
+                    detail=f"Time slot overlaps with an existing booking: {eb['time_slot']}."
+                )
+        except ValueError:
+            pass
     
     # 4. Atomic Insert with Concurrency Protection (Unique Partial Index Guard)
     try:
         cursor.execute(
             "INSERT INTO bookings (user_id, facility_id, sport_id, booking_date, time_slot, status, notes, idempotency_key) VALUES (?, ?, ?, ?, ?, 'confirmed', ?, ?)",
-            (user_id, data.facility_id, data.sport_id, data.booking_date, data.time_slot, data.notes or "", data.idempotency_key.strip() if data.idempotency_key else None)
+            (user_id, data.facility_id, data.sport_id, data.booking_date, computed_time_slot, data.notes or "", data.idempotency_key.strip() if data.idempotency_key else None)
         )
         conn.commit()
         booking_id = cursor.lastrowid
@@ -270,11 +296,11 @@ def create_booking(user_id: int, data: BookingCreate) -> BookingResponse:
             user_id=user_id,
             resource_type="facility",
             resource_id=data.facility_id,
-            details=f"Concurrency collision on facility #{data.facility_id} on {data.booking_date} at {data.time_slot}"
+            details=f"Concurrency collision on facility #{data.facility_id} on {data.booking_date} at {computed_time_slot}"
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Facility is already booked for date {data.booking_date} at slot {data.time_slot}."
+            detail=f"Facility is already booked for date {data.booking_date} at slot {computed_time_slot}."
         )
     
     cursor.execute("""
@@ -296,7 +322,7 @@ def create_booking(user_id: int, data: BookingCreate) -> BookingResponse:
         user_id=user_id,
         resource_type="booking",
         resource_id=booking_id,
-        details=f"Booking #{booking_id} created for facility '{fac['name']}' on {data.booking_date} ({data.time_slot})"
+        details=f"Booking #{booking_id} created for facility '{fac['name']}' on {data.booking_date} ({computed_time_slot})"
     )
     
     return BookingResponse(**dict(row))
@@ -484,6 +510,95 @@ def restore_booking(booking_id: int, user_id: int, is_admin: bool = False) -> Di
         "message": f"Booking #{booking_id} ({row['sport_name']} at {row['facility_name']} on {row['booking_date']} at {row['time_slot']}) has been restored successfully.",
         "booking_id": booking_id
     }
+
+def reschedule_booking(booking_id: int, user_id: int, data: BookingReschedule, is_admin: bool = False) -> BookingResponse:
+    today_iso = date.today().isoformat()
+    if data.new_booking_date < today_iso:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot reschedule bookings to past dates."
+        )
+
+    computed_time_slot = f"{data.new_start_time} - {data.new_end_time}"
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT id, user_id, facility_id, booking_date, time_slot, status 
+        FROM bookings WHERE id = ?
+    """, (booking_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found.")
+    
+    if not is_admin and row["user_id"] != user_id:
+        conn.close()
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only reschedule your own bookings.")
+        
+    if row["status"] != "confirmed":
+        conn.close()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot reschedule a cancelled booking.")
+        
+    cursor.execute("SELECT open_time, close_time FROM facilities WHERE id = ?", (row["facility_id"],))
+    fac = cursor.fetchone()
+    if fac and (data.new_start_time < fac["open_time"] or data.new_end_time > fac["close_time"]):
+        conn.close()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Requested slot {data.new_start_time} - {data.new_end_time} is outside facility operating hours ({fac['open_time']} - {fac['close_time']})."
+        )
+    if data.new_start_time >= data.new_end_time:
+        conn.close()
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Start time must be before end time.")
+
+    # Check conflict excluding current booking_id (Overlap Logic)
+    cursor.execute(
+        "SELECT id, time_slot FROM bookings WHERE facility_id = ? AND booking_date = ? AND status = 'confirmed' AND id != ?",
+        (row["facility_id"], data.new_booking_date, booking_id)
+    )
+    existing_bookings = cursor.fetchall()
+    for eb in existing_bookings:
+        try:
+            eb_start, eb_end = eb["time_slot"].split(" - ")
+            if data.new_start_time < eb_end and data.new_end_time > eb_start:
+                conn.close()
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, 
+                    detail=f"Time slot overlaps with an existing booking: {eb['time_slot']}."
+                )
+        except ValueError:
+            pass
+        
+    cursor.execute("""
+        UPDATE bookings SET booking_date = ?, time_slot = ? WHERE id = ?
+    """, (data.new_booking_date, computed_time_slot, booking_id))
+    conn.commit()
+    
+    cursor.execute("""
+        SELECT b.id, b.user_id, u.name as user_name, u.email as user_email,
+               b.facility_id, f.name as facility_name,
+               b.sport_id, s.name as sport_name,
+               b.booking_date, b.time_slot, b.status, b.notes, b.idempotency_key, b.created_at
+        FROM bookings b
+        LEFT JOIN users u ON b.user_id = u.id
+        LEFT JOIN facilities f ON b.facility_id = f.id
+        LEFT JOIN sports s ON b.sport_id = s.id
+        WHERE b.id = ?
+    """, (booking_id,))
+    updated_row = cursor.fetchone()
+    conn.close()
+    
+    log_audit_event(
+        action="BOOKING_RESCHEDULED",
+        user_id=user_id,
+        resource_type="booking",
+        resource_id=booking_id,
+        details=f"Booking #{booking_id} rescheduled to {data.new_booking_date} ({computed_time_slot})"
+    )
+    
+    return BookingResponse(**dict(updated_row))
+
 
 # --- ATTENDANCE SERVICE ---
 def mark_attendance(data: AttendanceCreate, marked_by: int) -> AttendanceResponse:

@@ -251,7 +251,7 @@ def extract_target_user_info(text: str, current_user: Dict[str, Any]) -> Tuple[O
         target = m_name_book.group(1).strip()
     elif m_how_many:
         target = m_how_many.group(1).strip()
-    elif m_for and any(k in low for k in ["booking", "bookings", "schedule", "court", "attendance"]):
+    elif m_for and any(k in low for k in ["booking", "bookings", "schedule", "court", "attendance", "book", "reserve"]):
         target = m_for.group(1).strip()
         
     non_user_entities = list(SPORTS_SYNONYMS.keys()) + [
@@ -384,6 +384,21 @@ def extract_tournament_params(text: str) -> Dict[str, Any]:
 
 # --- MAIN ORCHESTRATOR ---
 
+def _resolve_target_user_id(target_user: str) -> Optional[int]:
+    """Helper to find user ID by name or email or ID string."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    if target_user.isdigit():
+        cursor.execute("SELECT id FROM users WHERE id = ?", (int(target_user),))
+    elif "@" in target_user:
+        cursor.execute("SELECT id FROM users WHERE LOWER(email) = ?", (target_user.lower(),))
+    else:
+        cursor.execute("SELECT id FROM users WHERE LOWER(name) LIKE ?", (f"%{target_user.lower()}%",))
+    
+    row = cursor.fetchone()
+    conn.close()
+    return row["id"] if row else None
+
 def process_query(query: str, current_user: Dict[str, Any], session_id: str = "default_session") -> QueryResponse:
     user_id = current_user.get("id", 0)
     user_role = current_user.get("role", "student")
@@ -453,14 +468,16 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
                 )
 
             elif action_type == "book_slot":
+                actual_user_id = pending.get("target_user_id") or user_id
+                target_name_str = pending.get("target_name_str", "you")
                 # Deterministic constraint validation (TRACE-CS)
                 c_val = validate_booking_request(
-                    user_id=user_id,
+                    user_id=actual_user_id,
                     sport_name=pending["sport_name"],
                     booking_date=pending["booking_date"],
                     time_slot=pending["time_slot"],
                     facility_id=pending.get("facility_id"),
-                    user_role=user_role
+                    user_role=user_role if actual_user_id == user_id else "student"
                 )
                 if not c_val.is_valid:
                     return QueryResponse(
@@ -471,12 +488,15 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
                     )
 
                 res = tools.create_booking_tool(
-                    user_id=user_id,
+                    user_id=actual_user_id,
                     sport_name=pending["sport_name"],
                     booking_date=pending["booking_date"],
                     time_slot=pending["time_slot"],
                     notes="Booked via AI Assistant"
                 )
+                if target_name_str != "you" and res.get("success"):
+                    res["message"] = res["message"].replace("for you", f"for {target_name_str}")
+
                 return QueryResponse(
                     intent="booking_confirmed",
                     message=f"✅ {res['message']}",
@@ -876,7 +896,59 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
             data=res.get("data")
         )
 
+
+    # --- 7.4 ACTION: RESCHEDULE BOOKING ---
+    is_reschedule_action = any(re.search(pat, q) for pat in [
+        r"\breschedule\b",
+        r"\bchange\s+time\b",
+        r"\bmove\s+booking\b",
+        r"\bpostpone\b"
+    ]) and "cancel" not in q
+
+    if is_reschedule_action:
+        b_id = 0
+        m_id = re.search(r"\b(?:booking\s+id|booking|reservation|id|#)\s*#?(\d+)\b", raw_query.lower())
+        if not m_id and re.search(r"\breschedule\s+#?(\d+)\b", raw_query.lower()):
+            m_id = re.search(r"\breschedule\s+#?(\d+)\b", raw_query.lower())
+        
+        if m_id:
+            extracted_num = int(m_id.group(1))
+            if not (1900 <= extracted_num <= 2100 and any(w in raw_query.lower() for w in ["-", "/", "2026", "2025", "2024"])):
+                b_id = extracted_num
+        
+        if b_id > 0:
+            new_date = extract_date(raw_query)
+            new_slot = extract_time_slot(raw_query)
+            
+            if not new_date or not new_slot:
+                return QueryResponse(
+                    intent="reschedule_booking_missing_time",
+                    message=f"I see you want to reschedule booking #{b_id}. Please provide the new date and time (e.g., 'Reschedule booking {b_id} to tomorrow at 5pm').",
+                    success=False
+                )
+            
+            res = tools.reschedule_booking_tool(
+                user_id=user_id,
+                role=user_role,
+                booking_id=b_id,
+                new_booking_date=new_date,
+                new_time_slot=new_slot
+            )
+            return QueryResponse(
+                intent="reschedule_booking",
+                message=f"✅ {res['message']}" if res["success"] else f"⚠️ {res['message']}",
+                success=res["success"],
+                data=res.get("data")
+            )
+        else:
+            return QueryResponse(
+                intent="reschedule_booking_missing_id",
+                message="To reschedule a booking, please specify the booking ID (e.g., 'Reschedule booking 41 to tomorrow at 5pm'). You can find your booking ID by asking 'Show my active bookings'.",
+                success=False
+            )
+
     # --- 7.5 ACTION: RESTORE / UNDO CANCELLED BOOKING ---
+
     is_restore_action = any(re.search(pat, q) for pat in [
         r"\brestore\s+(?:the\s+)?(?:booking\s+)?(?:id\s+|#)?(\d+)\b",
         r"\brestore\s+(?:my\s+|the\s+)?booking\b",
@@ -1555,6 +1627,21 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
         else:
             detected_slot = None
 
+        target_user, is_all_students, is_self = extract_target_user_info(raw_query, current_user)
+        target_user_id = user_id
+        target_name_str = "you"
+        if target_user and user_role == "admin":
+            resolved = _resolve_target_user_id(target_user)
+            if resolved:
+                target_user_id = resolved
+                target_name_str = target_user
+            else:
+                return QueryResponse(
+                    intent="booking_failed",
+                    message=f"I couldn't find a user matching '{target_user}'. Please specify their exact name or email.",
+                    success=False
+                )
+
         if not detected_sport:
             return QueryResponse(
                 intent="missing_sport",
@@ -1575,16 +1662,6 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
                 success=False
             )
         
-        # 2. Operating Hours Pre-Validation: Slot must be within campus operating schedule
-        if detected_slot and detected_slot not in sports_service.ALL_STANDARD_SLOTS:
-            ranked_alts = sports_service.rank_slots_by_proximity(sports_service.ALL_STANDARD_SLOTS, requested_slot=detected_slot)
-            return QueryResponse(
-                intent="slot_conflict_alternatives",
-                message=f"❌ {detected_sport} is unavailable at {detected_slot} on {detected_date} (outside standard operating schedule: 06:00 - 09:00 morning session, 16:00 - 20:00 evening session). Available alternative slots: {', '.join(ranked_alts)}.",
-                success=False,
-                suggested_slots=ranked_alts
-            )
-
         # Case A: Slot is not specified -> list all available slots from real SQLite DB
         if not detected_slot:
             alt = tools.find_alternative_slots(detected_sport, detected_date)
@@ -1595,7 +1672,7 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
             if is_explicit_book_action:
                 return QueryResponse(
                     intent="check_available_slots",
-                    message=f"For {detected_sport} on {detected_date}, available slots are: {slot_str}. Which slot would you like to book?",
+                    message=f"For {detected_sport} on {detected_date}, available slots are: {slot_str}. Which slot would you like to book for {target_name_str}?",
                     success=True,
                     suggested_slots=slots
                 )
@@ -1621,9 +1698,11 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
                     "facility_name": fac_name,
                     "booking_date": detected_date,
                     "time_slot": detected_slot,
+                    "target_user_id": target_user_id,
+                    "target_name_str": target_name_str,
                     "timestamp": datetime.now()
                 }
-                msg = f"{fac_name} ({detected_sport}) is available on {detected_date} from {detected_slot}. Shall I confirm this booking?"
+                msg = f"{fac_name} ({detected_sport}) is available on {detected_date} from {detected_slot}. Shall I confirm this booking for {target_name_str}?"
                 return QueryResponse(
                     intent="confirm_booking_request",
                     message=msg,

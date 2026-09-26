@@ -1,10 +1,11 @@
 import streamlit as st
+from streamlit_option_menu import option_menu
 import pandas as pd
 import uuid
 import os
 import sys
 from pathlib import Path
-from datetime import date, timedelta
+from datetime import date, timedelta, time, datetime
 
 # Ensure frontend directory is in sys.path
 FRONTEND_DIR = Path(__file__).resolve().parent
@@ -24,54 +25,83 @@ st.set_page_config(
 # Custom Styling
 st.markdown("""
 <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif !important;
+    }
+
     .main-header {
-        font-size: 2.2rem;
-        font-weight: 700;
-        color: #1E3A8A;
-        margin-bottom: 0.2rem;
+        font-size: 2.5rem;
+        font-weight: 800;
+        color: #0f172a;
+        margin-bottom: 0.5rem;
+        letter-spacing: -0.025em;
     }
+
     .sub-header {
-        font-size: 1rem;
-        color: #64748B;
-        margin-bottom: 1.5rem;
-    }
-    .metric-card {
-        background-color: #F8FAFC;
-        border: 1px solid #E2E8F0;
-        border-radius: 12px;
-        padding: 1.2rem;
-        text-align: center;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    }
-    .stButton>button {
-        border-radius: 8px;
-        font-weight: 600;
-    }
-    .badge-admin {
-        background-color: #FEF3C7;
-        color: #92400E;
-        padding: 2px 8px;
-        border-radius: 6px;
-        font-size: 0.8rem;
-        font-weight: 600;
-    }
-    .badge-student {
-        background-color: #DBEAFE;
-        color: #1E40AF;
-        padding: 2px 8px;
-        border-radius: 6px;
-        font-size: 0.8rem;
-        font-weight: 600;
-    }
-    .confirmation-box {
-        background-color: #FEF3C7;
-        border-left: 4px solid #F59E0B;
-        padding: 12px 16px;
-        border-radius: 6px;
-        margin: 10px 0;
-        color: #78350F;
+        font-size: 1.1rem;
+        color: #64748b;
+        margin-bottom: 2rem;
         font-weight: 500;
     }
+
+    /* Modernize Streamlit elements */
+    .stButton>button {
+        border-radius: 10px;
+        font-weight: 600;
+        transition: all 0.2s ease;
+        border: 1px solid transparent;
+    }
+
+    .stButton>button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    }
+
+    /* Metric cards container override */
+    [data-testid="stMetricValue"] {
+        font-weight: 800 !important;
+        color: #2563eb !important;
+    }
+    
+    [data-testid="stMetricLabel"] {
+        font-weight: 600 !important;
+        color: #64748b !important;
+        font-size: 0.95rem !important;
+    }
+
+    .badge-admin {
+        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+        color: #92400e;
+        padding: 4px 10px;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        font-weight: 700;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    .badge-student {
+        background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+        color: #1e40af;
+        padding: 4px 10px;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        font-weight: 700;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    .confirmation-box {
+        background: linear-gradient(to right, #fffbeb, #fef3c7);
+        border-left: 5px solid #f59e0b;
+        padding: 16px 20px;
+        border-radius: 8px;
+        margin: 15px 0;
+        color: #92400e;
+        font-weight: 600;
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+    }
+    
 </style>
 """, unsafe_allow_html=True)
 
@@ -157,14 +187,13 @@ def render_auth():
             reg_name = st.text_input("Full Name", placeholder="e.g. Vikram Malhotra", key="reg_name")
             reg_email = st.text_input("Email Address", placeholder="e.g. vikram@sports.edu", key="reg_email")
             reg_password = st.text_input("Password", type="password", placeholder="Minimum 4 characters", key="reg_pass")
-            reg_role = st.selectbox("Role", ["student", "admin"], key="reg_role")
 
             if st.button("✨ Register", use_container_width=True):
                 if not reg_name or not reg_email or not reg_password:
                     st.error("Please fill in all fields.")
                 else:
                     try:
-                        resp = api.api_register(reg_name.strip(), reg_email.strip(), reg_password, reg_role)
+                        resp = api.api_register(reg_name.strip(), reg_email.strip(), reg_password, "student")
                         if resp.status_code == 200:
                             st.success("Account created successfully! Please switch to the Sign In tab to log in.")
                         else:
@@ -187,25 +216,35 @@ def render_sidebar():
             menu_options = [
                 "📊 Dashboard",
                 "🏅 Sports Catalog",
-                "🏟️ Facilities & Courts",
+                "🏟️ Facilities",
                 "📅 Bookings",
                 "📋 Attendance",
-                "👥 User Directory",
-                "📈 Advanced Analytics & Benchmark",
-                "🛡️ Audit & Provenance Ledger",
-                "🤖 AI Assistant"
+                "👥 Users Directory",
+                "📈 Analytics",
+                "🛡️ Audit Ledger",
+                "💬 AI Assistant"
             ]
         else:
             menu_options = [
                 "📊 Dashboard",
                 "🏅 Sports Catalog",
-                "🏟️ Facilities & Courts",
+                "🏟️ Facilities",
                 "📅 My Bookings",
                 "📋 My Attendance",
-                "🤖 AI Assistant"
+                "💬 AI Assistant"
             ]
 
-        selected = st.radio("Navigation", menu_options, key="nav_selection")
+        selected = option_menu(
+            menu_title="Navigation",
+            options=menu_options,
+            default_index=0,
+            styles={
+                "container": {"padding": "0!important", "background-color": "transparent", "border": "none"},
+                "icon": {"display": "none"},
+                "nav-link": {"font-size": "14px", "text-align": "left", "margin":"2px 0", "--hover-color": "#f1f5f9", "color": "#475569"},
+                "nav-link-selected": {"background-color": "#eff6ff", "color": "#2563eb", "border-left": "4px solid #2563eb", "font-weight": "600"},
+            }
+        )
         st.divider()
 
         if st.button("🚪 Log Out", use_container_width=True):
@@ -266,7 +305,7 @@ def render_dashboard():
             if my_bookings:
                 df_b = pd.DataFrame(my_bookings)
                 cols_map = {
-                    "id": "ID", "sport_name": "Sport", "facility_name": "Facility",
+                    "sport_name": "Sport", "facility_name": "Facility",
                     "booking_date": "Date", "time_slot": "Slot", "status": "Status", "notes": "Notes"
                 }
                 disp = [c for c in cols_map.keys() if c in df_b.columns]
@@ -308,7 +347,7 @@ def render_dashboard():
                     if stats["recent_bookings"]:
                         df_recent = pd.DataFrame(stats["recent_bookings"])
                         rename_map = {
-                            "id": "ID", "user_name": "Student", "sport_name": "Sport",
+                            "user_name": "Student", "sport_name": "Sport",
                             "facility_name": "Facility", "booking_date": "Date", "time_slot": "Slot", "status": "Status"
                         }
                         df_recent = df_recent[[k for k in rename_map.keys() if k in df_recent.columns]].rename(columns=rename_map)
@@ -411,7 +450,14 @@ def render_facilities():
                 f_name = st.text_input("Facility Name", placeholder="e.g. Tennis Court 1")
                 f_sport = st.selectbox("Associated Sport", list(sport_map.keys()) if sport_map else ["None"])
                 f_loc = st.text_input("Location / Campus Zone", placeholder="e.g. North Sports Complex Level 2")
-                f_cap = st.number_input("Max Court Capacity", min_value=1, max_value=200, value=10)
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    f_cap = st.number_input("Max Court Capacity", min_value=1, max_value=200, value=10)
+                with c2:
+                    f_open = st.time_input("Open Time", value=time(6, 0))
+                with c3:
+                    f_close = st.time_input("Close Time", value=time(22, 0))
+                
                 f_avail = st.selectbox("Initial Status", ["Available", "Under Maintenance"])
 
                 if st.form_submit_button("Add Facility"):
@@ -420,7 +466,9 @@ def render_facilities():
                     else:
                         resp = api.api_add_facility(
                             token, f_name, sport_map[f_sport], f_loc, f_cap,
-                            1 if f_avail == "Available" else 0
+                            1 if f_avail == "Available" else 0,
+                            f_open.strftime("%H:%M"),
+                            f_close.strftime("%H:%M")
                         )
                         if resp.status_code == 200:
                             st.success(f"Facility '{f_name}' registered successfully!")
@@ -438,8 +486,9 @@ def render_facilities():
 
             df_fac = pd.DataFrame(facs)
             df_fac["Status"] = df_fac["is_available"].apply(lambda x: "🟢 Available" if x == 1 else "🔴 Maintenance")
-            display_df = df_fac[["id", "name", "sport_name", "location", "capacity", "Status"]].rename(
-                columns={"id": "ID", "name": "Facility Name", "sport_name": "Sport", "location": "Location", "capacity": "Capacity"}
+            df_fac["Operating Hours"] = df_fac.apply(lambda row: f"{row.get('open_time', '06:00')} - {row.get('close_time', '22:00')}", axis=1)
+            display_df = df_fac[["name", "sport_name", "location", "capacity", "Operating Hours", "Status"]].rename(
+                columns={"name": "Facility Name", "sport_name": "Sport", "location": "Location", "capacity": "Capacity"}
             )
             st.dataframe(display_df, use_container_width=True, hide_index=True)
 
@@ -507,7 +556,7 @@ def render_bookings():
 
                 df = pd.DataFrame(b_list)
                 rename_cols = {
-                    "id": "Booking ID", "user_name": "Student", "sport_name": "Sport",
+                    "user_name": "Student", "sport_name": "Sport",
                     "facility_name": "Facility", "booking_date": "Date", "time_slot": "Slot",
                     "status": "Status", "notes": "Notes"
                 }
@@ -552,31 +601,59 @@ def render_bookings():
             if not matching_facs:
                 st.info(f"No available facilities currently open for {selected_sport_name}.")
             else:
-                fac_dict = {f"{f['name']} ({f['location']})": f["id"] for f in matching_facs}
+                fac_dict = {f"{f['name']} ({f['location']}) [{f.get('open_time', '06:00')} - {f.get('close_time', '22:00')}]": f["id"] for f in matching_facs}
                 selected_fac_name = st.selectbox("2. Choose Available Facility", list(fac_dict.keys()), key="book_fac")
                 selected_fac_id = fac_dict[selected_fac_name]
-
-                c1, c2 = st.columns(2)
+                
+                selected_fac = next(f for f in matching_facs if f["id"] == selected_fac_id)
+                open_t = selected_fac.get("open_time", "06:00")
+                close_t = selected_fac.get("close_time", "22:00")
+                
+                c1, c2, c3 = st.columns([2,1,1])
                 with c1:
                     book_date = st.date_input("3. Select Date", min_value=date.today(), max_value=date.today() + timedelta(days=14), key="book_date_picker")
+                
+                try:
+                    open_time_obj = datetime.strptime(open_t, "%H:%M").time()
+                    close_time_obj = datetime.strptime(close_t, "%H:%M").time()
+                except ValueError:
+                    open_time_obj = time(6, 0)
+                    close_time_obj = time(22, 0)
+                    
                 with c2:
-                    slots = [
-                        "06:00 - 07:00", "07:00 - 08:00", "08:00 - 09:00",
-                        "16:00 - 17:00", "17:00 - 18:00", "18:00 - 19:00", "19:00 - 20:00"
-                    ]
-                    book_slot = st.selectbox("4. Select Time Slot", slots, key="book_slot")
+                    book_start = st.time_input("4. Start Time", value=open_time_obj)
+                with c3:
+                    book_end = st.time_input("5. End Time", value=close_time_obj)
 
                 book_notes = st.text_input("Notes / Team Name (Optional)", placeholder="e.g. Practice match with batch mates", key="book_notes_input")
 
+                target_user_id = None
+                if is_admin:
+                    users_resp = api.api_list_users(token)
+                    if users_resp.status_code == 200:
+                        all_users = users_resp.json()
+                        user_dict = {f"{u['name']} ({u['email']})": u["id"] for u in all_users}
+                        selected_user_label = st.selectbox("Book On Behalf Of (Admin Only)", ["Myself"] + list(user_dict.keys()), key="book_target_user")
+                        if selected_user_label != "Myself":
+                            target_user_id = user_dict[selected_user_label]
+
                 if st.button("🎯 Confirm Reservation", type="primary", use_container_width=True, key="btn_confirm_book"):
-                    resp = api.api_create_booking(
-                        token, selected_fac_id, selected_sport_id, str(book_date), book_slot, book_notes
-                    )
-                    if resp.status_code == 200:
-                        st.success(f"🎉 Slot confirmed for {selected_sport_name} on {book_date} at {book_slot}!")
-                        st.rerun()
+                    start_str = book_start.strftime("%H:%M")
+                    end_str = book_end.strftime("%H:%M")
+                    
+                    if start_str >= end_str:
+                        st.error("End Time must be after Start Time.")
+                    elif start_str < open_t or end_str > close_t:
+                        st.error(f"Selected time is outside facility operating hours ({open_t} - {close_t}).")
                     else:
-                        st.error(f"❌ Booking failed: {resp.json().get('detail', 'Slot conflict or unavailable')}")
+                        resp = api.api_create_booking(
+                            token, selected_fac_id, selected_sport_id, str(book_date), start_str, end_str, book_notes, target_user_id
+                        )
+                        if resp.status_code == 200:
+                            st.success(f"🎉 Slot confirmed for {selected_sport_name} on {book_date} at {start_str} - {end_str}!")
+                            st.rerun()
+                        else:
+                            st.error(f"❌ Booking failed: {resp.json().get('detail', 'Slot conflict or unavailable')}")
 
 # Page 5: Attendance
 def render_attendance():
@@ -697,8 +774,8 @@ def render_users():
 
             df_users = pd.DataFrame(users)
             df_users["Status"] = df_users["is_blocked"].apply(lambda x: "🔴 Blocked" if x == 1 else "🟢 Active")
-            display_df = df_users[["id", "name", "email", "role", "Status", "created_at"]].rename(
-                columns={"id": "User ID", "name": "Full Name", "email": "Email Address", "role": "Role", "created_at": "Joined At"}
+            display_df = df_users[["name", "email", "role", "Status", "created_at"]].rename(
+                columns={"name": "Full Name", "email": "Email Address", "role": "Role", "created_at": "Joined At"}
             )
             st.dataframe(display_df, use_container_width=True, hide_index=True)
 
@@ -761,7 +838,7 @@ def render_ai_assistant():
 
     col_title, col_clear = st.columns([4, 1])
     with col_title:
-        st.markdown("<div class='main-header'>🤖 AI Sports Assistant</div>", unsafe_allow_html=True)
+        st.markdown("<div class='main-header'>💬 AI Sports Assistant (Chatbot)</div>", unsafe_allow_html=True)
         st.markdown("<div class='sub-header'>Natural language sports booking, cancellation, attendance & queries</div>", unsafe_allow_html=True)
     with col_clear:
         st.write("")
@@ -1078,19 +1155,19 @@ def main():
             render_dashboard()
         elif selected_page == "🏅 Sports Catalog":
             render_sports()
-        elif selected_page == "🏟️ Facilities & Courts":
+        elif selected_page == "🏟️ Facilities":
             render_facilities()
         elif selected_page in ["📅 Bookings", "📅 My Bookings"]:
             render_bookings()
         elif selected_page in ["📋 Attendance", "📋 My Attendance"]:
             render_attendance()
-        elif selected_page == "👥 User Directory":
+        elif selected_page == "👥 Users Directory":
             render_users()
-        elif selected_page == "📈 Advanced Analytics & Benchmark":
+        elif selected_page == "📈 Analytics":
             render_advanced_analytics()
-        elif selected_page == "🛡️ Audit & Provenance Ledger":
+        elif selected_page == "🛡️ Audit Ledger":
             render_audit_provenance()
-        elif selected_page == "🤖 AI Assistant":
+        elif selected_page == "💬 AI Assistant":
             render_ai_assistant()
 
 if __name__ == "__main__":

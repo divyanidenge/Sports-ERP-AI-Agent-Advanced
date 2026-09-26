@@ -161,7 +161,7 @@ def check_availability(sport_name: str, booking_date: str, time_slot: str) -> Di
     matched_sport_name = sport_row["name"]
 
     # Find facilities for this sport
-    cursor.execute("SELECT id, name, location, capacity FROM facilities WHERE sport_id = ? AND is_available = 1", (sport_id,))
+    cursor.execute("SELECT id, name, location, capacity, open_time, close_time FROM facilities WHERE sport_id = ? AND is_available = 1", (sport_id,))
     facilities = [dict(f) for f in cursor.fetchall()]
     if not facilities:
         conn.close()
@@ -172,24 +172,17 @@ def check_availability(sport_name: str, booking_date: str, time_slot: str) -> Di
             "data": None
         }
 
-    # Check if requested slot is part of campus operating slots
-    if time_slot not in ALL_STANDARD_SLOTS:
-        conn.close()
-        alt = find_alternative_slots(matched_sport_name, booking_date, time_slot)
-        return {
-            "success": True,
-            "available": False,
-            "sport_id": sport_id,
-            "sport_name": matched_sport_name,
-            "booking_date": booking_date,
-            "time_slot": time_slot,
-            "message": f"{matched_sport_name} is unavailable at {time_slot} on {booking_date}.",
-            "alternative_slots": alt.get("available_slots", [])
-        }
-
     # Find free facility
     available_facilities = []
+    try:
+        req_start, req_end = time_slot.split(" - ")
+    except ValueError:
+        req_start, req_end = "", ""
+        
     for fac in facilities:
+        if req_start and req_end and (req_start < fac.get("open_time", "06:00") or req_end > fac.get("close_time", "22:00")):
+            continue # Slot is outside operating hours for this facility
+            
         cursor.execute(
             "SELECT id FROM bookings WHERE facility_id = ? AND booking_date = ? AND time_slot = ? AND status = 'confirmed'",
             (fac["id"], booking_date, time_slot)
@@ -198,6 +191,19 @@ def check_availability(sport_name: str, booking_date: str, time_slot: str) -> Di
             available_facilities.append(fac)
     
     conn.close()
+
+    if not available_facilities:
+        alt = find_alternative_slots(matched_sport_name, booking_date, time_slot)
+        return {
+            "success": True,
+            "available": False,
+            "sport_id": sport_id,
+            "sport_name": matched_sport_name,
+            "booking_date": booking_date,
+            "time_slot": time_slot,
+            "message": f"{matched_sport_name} is unavailable at {time_slot} on {booking_date} (either booked or outside hours).",
+            "alternative_slots": alt.get("available_slots", [])
+        }
 
     if available_facilities:
         chosen = available_facilities[0]
@@ -239,20 +245,29 @@ def find_alternative_slots(sport_name: str, booking_date: str, requested_slot: O
         return {"success": False, "available_slots": [], "message": f"Sport '{sport_name}' not found."}
 
     sport_id = sport_row["id"]
-    cursor.execute("SELECT id, name FROM facilities WHERE sport_id = ? AND is_available = 1", (sport_id,))
+    cursor.execute("SELECT id, name, open_time, close_time FROM facilities WHERE sport_id = ? AND is_available = 1", (sport_id,))
     facilities = [dict(f) for f in cursor.fetchall()]
     if not facilities:
         conn.close()
         return {"success": False, "available_slots": [], "message": f"No active facilities for {sport_row['name']}."}
 
+    # Generate all possible 1-hour slots across the whole day
+    possible_slots = [f"{h:02d}:00 - {(h+1):02d}:00" for h in range(0, 23)]
+
     free_slots = []
     slot_capacities = {}
-    for slot in ALL_STANDARD_SLOTS:
+    for slot in possible_slots:
         if requested_slot and slot == requested_slot:
             continue
-        # Count free facilities for this slot
+            
+        req_start, req_end = slot.split(" - ")
+        
+        # Count free facilities for this slot that are OPEN
         free_count = 0
         for fac in facilities:
+            if req_start < fac.get("open_time", "06:00") or req_end > fac.get("close_time", "22:00"):
+                continue # Facility is closed at this time
+                
             cursor.execute(
                 "SELECT id FROM bookings WHERE facility_id = ? AND booking_date = ? AND time_slot = ? AND status = 'confirmed'",
                 (fac["id"], booking_date, slot)
@@ -301,11 +316,13 @@ def create_booking_tool(user_id: int, sport_name: str, booking_date: str, time_s
         clean_slot = time_slot.replace(" ", "").replace(":", "")
         idempotency_key = f"ai-book-{user_id}-{fac_id}-{booking_date}-{clean_slot}"
 
+    start_time, end_time = [s.strip() for s in time_slot.split("-")]
     booking_req = BookingCreate(
         facility_id=fac_id,
         sport_id=sport_id,
         booking_date=booking_date,
-        time_slot=time_slot,
+        start_time=start_time,
+        end_time=end_time,
         notes=notes or "Booked via AI Assistant",
         idempotency_key=idempotency_key
     )
@@ -758,3 +775,34 @@ def predict_highest_demand_facility_tool(
     from app.demand_forecaster import predict_highest_demand_facility_tool as _highest_tool
     return _highest_tool(booking_date=booking_date, time_slot=time_slot)
 
+
+
+def reschedule_booking_tool(user_id: int, role: str, booking_id: int, new_booking_date: str, new_time_slot: str) -> Dict[str, Any]:
+    """Reschedules a booking by ID."""
+    from app.models import BookingReschedule
+    if not booking_id or booking_id <= 0:
+        return {
+            "success": False,
+            "message": "Please specify the booking ID you would like to reschedule (e.g. 'Reschedule booking 41 to tomorrow 5pm')."
+        }
+    is_admin = (role == "admin")
+    try:
+        start_time, end_time = [s.strip() for s in new_time_slot.split("-")]
+        req = BookingReschedule(
+            new_booking_date=new_booking_date,
+            new_start_time=start_time,
+            new_end_time=end_time
+        )
+        res = sports_service.reschedule_booking(booking_id=booking_id, user_id=user_id, data=req, is_admin=is_admin)
+        return {
+            "success": True,
+            "message": f"Booking #{booking_id} has been successfully rescheduled to {new_booking_date} at {new_time_slot}.",
+            "data": res.model_dump()
+        }
+    except Exception as e:
+        detail = getattr(e, "detail", str(e))
+        return {
+            "success": False,
+            "message": f"Reschedule failed: {detail}",
+            "data": None
+        }

@@ -44,14 +44,16 @@ def api_get_facilities():
     url = f"{API_BASE_URL}/facilities"
     return requests.get(url, timeout=10)
 
-def api_add_facility(token, name, sport_id, location, capacity, is_available=1):
+def api_add_facility(token, name, sport_id, location, capacity, is_available=1, open_time="06:00", close_time="22:00"):
     url = f"{API_BASE_URL}/facilities"
     payload = {
         "name": name,
         "sport_id": sport_id,
         "location": location,
         "capacity": capacity,
-        "is_available": is_available
+        "is_available": is_available,
+        "open_time": open_time,
+        "close_time": close_time
     }
     return requests.post(url, json=payload, headers=_get_headers(token), timeout=10)
 
@@ -63,14 +65,16 @@ def api_get_bookings(token, all_users=False):
     url = f"{API_BASE_URL}/bookings?all_users={'true' if all_users else 'false'}"
     return requests.get(url, headers=_get_headers(token), timeout=10)
 
-def api_create_booking(token, facility_id, sport_id, booking_date, time_slot, notes=""):
+def api_create_booking(token, facility_id, sport_id, booking_date, start_time, end_time, notes="", target_user_id=None):
     url = f"{API_BASE_URL}/bookings"
     payload = {
         "facility_id": facility_id,
         "sport_id": sport_id,
         "booking_date": booking_date,
-        "time_slot": time_slot,
-        "notes": notes
+        "start_time": start_time,
+        "end_time": end_time,
+        "notes": notes,
+        "target_user_id": target_user_id
     }
     return requests.post(url, json=payload, headers=_get_headers(token), timeout=10)
 

@@ -79,6 +79,8 @@ def init_db():
         location TEXT NOT NULL,
         capacity INTEGER DEFAULT 10,
         is_available INTEGER DEFAULT 1,
+        open_time TEXT DEFAULT '06:00',
+        close_time TEXT DEFAULT '22:00',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (sport_id) REFERENCES sports(id) ON DELETE CASCADE
     )
@@ -201,6 +203,14 @@ def migrate_db(conn):
 
     # 5. Ensure audit logs index exists
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_user_action ON audit_logs (user_id, created_at, action)")
+
+    # 6. Ensure open_time and close_time exist in facilities
+    cursor.execute("PRAGMA table_info(facilities)")
+    facility_cols = [r["name"] if isinstance(r, sqlite3.Row) else r[1] for r in cursor.fetchall()]
+    if "open_time" not in facility_cols:
+        cursor.execute("ALTER TABLE facilities ADD COLUMN open_time TEXT DEFAULT '06:00'")
+    if "close_time" not in facility_cols:
+        cursor.execute("ALTER TABLE facilities ADD COLUMN close_time TEXT DEFAULT '22:00'")
 
     conn.commit()
 
