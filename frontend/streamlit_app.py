@@ -874,9 +874,6 @@ def render_ai_assistant():
                 data = msg["data"]
                 if isinstance(data, list) and len(data) > 0 and isinstance(data[0], dict):
                     st.dataframe(pd.DataFrame(data), use_container_width=True)
-                elif isinstance(data, dict):
-                    clean_dict = {k: v for k, v in data.items() if k not in ["recent_bookings", "hashed_password"]}
-                    st.json(clean_dict)
 
     # Interactive Confirmation Prompt
     if st.session_state.get("pending_confirmation"):
@@ -976,9 +973,6 @@ def render_ai_assistant():
                         if payload:
                             if isinstance(payload, list) and len(payload) > 0 and isinstance(payload[0], dict):
                                 st.dataframe(pd.DataFrame(payload), use_container_width=True)
-                            elif isinstance(payload, dict):
-                                clean_payload = {k: v for k, v in payload.items() if k not in ["recent_bookings", "hashed_password"]}
-                                st.json(clean_payload)
 
                         messages.append({
                             "role": "assistant",
