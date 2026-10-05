@@ -61,8 +61,8 @@ def test_req_04_to_07_booking_search_and_cancellation(client, student_token):
 
     # 5. Cancel latest booking
     q5 = client.post("/agent/query", json={"query": "Cancel my latest booking", "session_id": "s2"}, headers=headers).json()
-    assert q5["intent"] == "cancel_booking"
-    assert q5["success"] is True
+    assert q5["intent"] == "cancel_booking", str(q5)
+    assert q5["success"] is True, str(q5)
 
     # 6. Show my upcoming bookings
     q6 = client.post("/agent/query", json={"query": "Show my upcoming bookings", "session_id": "s2"}, headers=headers).json()

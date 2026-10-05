@@ -822,6 +822,16 @@ def render_users():
         st.error(f"Error: {e}")
 
 # Page 7: Agentic AI Assistant Chat
+def format_chat_dataframe(df):
+    drop_cols = [col for col in df.columns if str(col).endswith('_id') or str(col).lower() == 'id' or str(col) == 'idempotency_key' or str(col) == 'created_at']
+    df = df.drop(columns=drop_cols, errors='ignore')
+    rename_dict = {}
+    for col in df.columns:
+        if isinstance(col, str):
+            new_col = ' '.join([word.capitalize() for word in col.split('_')])
+            rename_dict[col] = new_col
+    return df.rename(columns=rename_dict)
+
 def render_ai_assistant():
     clicked_prompt = None
     token = st.session_state["token"]
@@ -873,7 +883,8 @@ def render_ai_assistant():
             if msg.get("data"):
                 data = msg["data"]
                 if isinstance(data, list) and len(data) > 0 and isinstance(data[0], dict):
-                    st.dataframe(pd.DataFrame(data), use_container_width=True)
+                    df = pd.DataFrame(data)
+                    st.dataframe(format_chat_dataframe(df), use_container_width=True, hide_index=True)
 
     # Interactive Confirmation Prompt
     if st.session_state.get("pending_confirmation"):
@@ -972,7 +983,8 @@ def render_ai_assistant():
                         st.write(reply_msg)
                         if payload:
                             if isinstance(payload, list) and len(payload) > 0 and isinstance(payload[0], dict):
-                                st.dataframe(pd.DataFrame(payload), use_container_width=True)
+                                df_payload = pd.DataFrame(payload)
+                                st.dataframe(format_chat_dataframe(df_payload), use_container_width=True, hide_index=True)
 
                         messages.append({
                             "role": "assistant",

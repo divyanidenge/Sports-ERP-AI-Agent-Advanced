@@ -356,7 +356,12 @@ def cancel_booking_tool(user_id: int, role: str, sport_name: str = "", booking_i
 
     target_booking = None
     if booking_id > 0:
-        cursor.execute("SELECT id, user_id, status FROM bookings WHERE id = ?", (booking_id,))
+        cursor.execute("""
+            SELECT b.id, b.user_id, b.status, s.name as sport_name, b.booking_date, b.time_slot
+            FROM bookings b
+            LEFT JOIN sports s ON b.sport_id = s.id
+            WHERE b.id = ?
+        """, (booking_id,))
         target_booking = cursor.fetchone()
         if target_booking and role != "admin" and target_booking["user_id"] != user_id:
             conn.close()
@@ -407,9 +412,17 @@ def cancel_booking_tool(user_id: int, role: str, sport_name: str = "", booking_i
     is_admin = (role == "admin")
     try:
         res = sports_service.cancel_booking(b_id, user_id, is_admin=is_admin)
+        
+        # Build descriptive message
+        tb_dict = dict(target_booking)
+        sp_name = tb_dict.get("sport_name") or "reservation"
+        b_dt = tb_dict.get("booking_date", "")
+        t_sl = tb_dict.get("time_slot", "")
+        date_time_str = f" on {b_dt} at {t_sl}" if b_dt and t_sl else ""
+        
         return {
             "success": True,
-            "message": f"Booking #{b_id} has been cancelled successfully.",
+            "message": f"Your {sp_name} reservation{date_time_str} (Booking #{b_id}) has been successfully cancelled.",
             "data": res
         }
     except Exception as e:

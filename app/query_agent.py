@@ -10,6 +10,7 @@ import app.agent_tools as tools
 import app.sports_service as sports_service
 from app.constraint_engine import validate_booking_request, validate_cancellation_request
 from app.agents.orchestrator import SportsOrchestrator
+from app.database import get_db_connection
 
 logger = logging.getLogger("sports_erp.query_agent")
 logger.setLevel(logging.INFO)
@@ -57,7 +58,44 @@ SPORTS_SYNONYMS = {
     "tennis": "Tennis",
     "lawn tennis": "Tennis",
     "volleyball": "Volleyball",
-    "squash": "Squash"
+    "squash": "Squash",
+    "golf": "UNSUPPORTED_SPORT",
+    "hockey": "UNSUPPORTED_SPORT",
+    "rugby": "UNSUPPORTED_SPORT",
+    "baseball": "UNSUPPORTED_SPORT",
+    "gym": "UNSUPPORTED_SPORT",
+    "yoga": "UNSUPPORTED_SPORT",
+    "boxing": "UNSUPPORTED_SPORT",
+    "wrestling": "UNSUPPORTED_SPORT",
+    "athletics": "UNSUPPORTED_SPORT",
+    "track": "UNSUPPORTED_SPORT",
+    "carrom": "UNSUPPORTED_SPORT",
+    "chess": "UNSUPPORTED_SPORT",
+    "snooker": "UNSUPPORTED_SPORT",
+    "billiards": "UNSUPPORTED_SPORT",
+    "kabaddi": "UNSUPPORTED_SPORT",
+    "polo": "UNSUPPORTED_SPORT",
+    "archery": "UNSUPPORTED_SPORT",
+    "shooting": "UNSUPPORTED_SPORT",
+    "fencing": "UNSUPPORTED_SPORT",
+    "martial arts": "UNSUPPORTED_SPORT",
+    "judo": "UNSUPPORTED_SPORT",
+    "karate": "UNSUPPORTED_SPORT",
+    "taekwondo": "UNSUPPORTED_SPORT",
+    "cycling": "UNSUPPORTED_SPORT",
+    "gymnastics": "UNSUPPORTED_SPORT",
+    "weightlifting": "UNSUPPORTED_SPORT",
+    "powerlifting": "UNSUPPORTED_SPORT",
+    "bowling": "UNSUPPORTED_SPORT",
+    "surfing": "UNSUPPORTED_SPORT",
+    "skating": "UNSUPPORTED_SPORT",
+    "skiing": "UNSUPPORTED_SPORT",
+    "snowboarding": "UNSUPPORTED_SPORT",
+    "ice hockey": "UNSUPPORTED_SPORT",
+    "water polo": "UNSUPPORTED_SPORT",
+    "rowing": "UNSUPPORTED_SPORT",
+    "sailing": "UNSUPPORTED_SPORT",
+    "canoeing": "UNSUPPORTED_SPORT"
 }
 
 def extract_sport(text: str, fallback_sport: Optional[str] = None) -> Optional[str]:
@@ -76,6 +114,22 @@ def extract_date_explicit(text: str) -> Optional[str]:
         return (today + timedelta(days=1)).isoformat()
     if re.search(r"\b(?:parso|day after tomorrow)\b", low):
         return (today + timedelta(days=2)).isoformat()
+    if re.search(r"\b(?:yesterday)\b", low):
+        return (today - timedelta(days=1)).isoformat()
+    if re.search(r"\b(?:weekend|this weekend)\b", low):
+        # Find the next Saturday
+        days_ahead = 5 - today.weekday()
+        if days_ahead <= 0: # Target is in the past, so next week
+            days_ahead += 7
+        return (today + timedelta(days=days_ahead)).isoformat()
+        
+    weekdays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+    for i, day in enumerate(weekdays):
+        if re.search(rf"\b(?:this\s+)?{day}\b", low):
+            days_ahead = i - today.weekday()
+            if days_ahead <= 0: # Target is in the past, so next week
+                days_ahead += 7
+            return (today + timedelta(days=days_ahead)).isoformat()
     
     match_iso = re.search(r"\b(\d{4}-\d{2}-\d{2})\b", text)
     if match_iso:
@@ -259,7 +313,8 @@ def extract_target_user_info(text: str, current_user: Dict[str, Any]) -> Tuple[O
         "playing", "practice", "game", "match", "court", "courts", "facility", "facilities",
         "today", "tomorrow", "kal", "aaj", "parso", "tonight", "hours", "hour", "slot", "slots",
         "active", "upcoming", "cancelled", "confirmed", "booking", "bookings", "all", "campus",
-        "attendance", "history", "status", "overview", "show", "view", "list", "get", "check", "the"
+        "attendance", "history", "status", "overview", "show", "view", "list", "get", "check", "the",
+        "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "a", "an", "some", "any"
     ]
     
     if target:
@@ -723,6 +778,7 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
         "me", "myself", "my", "self", "own", "us", "student", "students", "admin",
         "playing", "practice", "game", "match", "court", "courts", "facility", "facilities",
         "today", "tomorrow", "kal", "aaj", "parso", "tonight", "hours", "hour", "slot", "slots",
+        "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "a", "an", "the", "some", "any",
         user_name.lower()
     ]
     if is_third_party_book and any(k in q for k in ["book", "reserve", "slot"]):
@@ -1553,13 +1609,16 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
         r"\bwhich\s+grounds\b"
     ]) or q.strip() in ["facilities", "courts", "grounds", "show courts"]:
         sport = extract_sport(raw_query)
-        res = tools.list_facilities_tool(sport or "")
-        return QueryResponse(
-            intent="list_facilities",
-            message=res["message"],
-            success=True,
-            data=res["data"]
-        )
+        date_in_query = extract_date_explicit(raw_query)
+        has_slot = bool(extract_time_slot(raw_query, None) or extract_ordinal_slot(raw_query, session["last_entities"].get("available_slots", [])))
+        if not date_in_query and not has_slot:
+            res = tools.list_facilities_tool(sport or "")
+            return QueryResponse(
+                intent="list_facilities",
+                message=res["message"],
+                success=True,
+                data=res["data"]
+            )
 
     # 12.10 General Dashboard Stats / Overview
     if any(k in q for k in ["overview", "dashboard", "summary", "stats", "statistics", "report", "sports erp overview"]):
@@ -1586,6 +1645,9 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
     
     is_avail_query = any(re.search(pat, q) for pat in [
         r"\bavailable\b",
+        r"\bavailability\b",
+        r"\bopen\b",
+        r"\bempty\b",
         r"\bfree\b",
         r"\bkhali\b",
         r"\bslots?\s+batao\b",
@@ -1616,6 +1678,12 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
 
     if should_run_booking_or_avail:
         detected_sport = sport_in_query or session["last_entities"].get("sport")
+        if detected_sport == "UNSUPPORTED_SPORT":
+            return QueryResponse(
+                intent="booking_failed",
+                message="Sorry, that sport is not available or supported on our campus.",
+                success=False
+            )
         detected_date = date_in_query or session["last_entities"].get("date") or date.today().isoformat()
         
         if resolved_slot_in_q:
@@ -1643,40 +1711,62 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
                 )
 
         if not detected_sport:
-            if GEMINI_API_KEY and GEMINI_API_KEY.strip():
-                conn = get_db_connection()
-                c = conn.cursor()
-                c.execute("SELECT name FROM sports")
-                sports_list = [row["name"] for row in c.fetchall()]
-                conn.close()
-                sports_str = ", ".join(sports_list) if sports_list else "no sports currently registered"
-
-                sys_prompt = (
-                    f"You are the Campus Sports ERP AI Assistant. The user's query about bookings or availability lacks a valid campus sport. "
-                    f"Our campus ONLY supports: {sports_str}. "
-                    "If they asked about a sport NOT in this list, politely inform them it is not available and list what is. "
-                    "If they didn't mention ANY sport at all, politely ask them which sport they would like to check or book. "
-                    "Be brief and helpful."
-                )
-                gemini_resp = handle_gemini_or_smart_fallback(raw_query, current_user, session, override_sys_prompt=sys_prompt)
-                return QueryResponse(
-                    intent="missing_sport",
-                    message=gemini_resp.message,
-                    success=False
-                )
-            else:
-                conn = get_db_connection()
-                c = conn.cursor()
-                c.execute("SELECT name FROM sports LIMIT 6")
-                example_sports = [row["name"] for row in c.fetchall()]
-                conn.close()
-                example_str = ", ".join(example_sports) if example_sports else "Badminton, Cricket"
+            conn = get_db_connection()
+            c = conn.cursor()
+            c.execute("SELECT name FROM sports")
+            all_sports = [row["name"] for row in c.fetchall()]
+            conn.close()
+            
+            # If they asked "what's available at 7 PM" without a sport, check all sports for that slot!
+            detected_date = date_in_query or session["last_entities"].get("date") or date.today().isoformat()
+            if is_avail_query and resolved_slot_in_q:
+                avail_list = []
+                for sp in all_sports:
+                    res = tools.check_availability(sp, detected_date, resolved_slot_in_q)
+                    if res.get("available"):
+                        avail_list.append(sp)
                 
-                return QueryResponse(
-                    intent="missing_sport",
-                    message=f"Which sport would you like to check or book? (e.g. {example_str})",
-                    success=True
-                )
+                if avail_list:
+                    sp_str = ", ".join(avail_list)
+                    return QueryResponse(
+                        intent="check_slot_availability",
+                        message=f"At {resolved_slot_in_q} on {detected_date}, the following sports are available: {sp_str}. Which one would you like to book?",
+                        success=True
+                    )
+                else:
+                    return QueryResponse(
+                        intent="check_slot_availability",
+                        message=f"Sorry, there are no sports facilities available at {resolved_slot_in_q} on {detected_date}.",
+                        success=True
+                    )
+
+            if all_sports:
+                display_sports = [s.title() for s in all_sports[:6]]
+                if len(display_sports) > 1:
+                    example_str = ", ".join(display_sports[:-1]) + f", or {display_sports[-1]}"
+                else:
+                    example_str = display_sports[0]
+            else:
+                example_str = "Badminton, or Cricket"
+                
+            # Extract date phrase for natural response
+            low_q = raw_query.lower()
+            date_str = ""
+            for phrase in ["this weekend", "weekend", "tomorrow", "today", "tonight", "this saturday", "this sunday", "saturday", "sunday", "monday", "tuesday", "wednesday", "thursday", "friday"]:
+                if re.search(rf"\b{phrase}\b", low_q):
+                    date_str = f" {phrase}"
+                    break
+            
+            if not date_str and date_in_query:
+                date_str = f" on {date_in_query}"
+                
+            action_verb = "book" if is_explicit_book_action else "check availability for"
+
+            return QueryResponse(
+                intent="missing_sport",
+                message=f"🤖 Sure! Which sport would you like to {action_verb}{date_str}? For example, {example_str}.",
+                success=True
+            )
         
         session["last_entities"]["sport"] = detected_sport
         session["last_entities"]["date"] = detected_date
@@ -1828,7 +1918,7 @@ def handle_gemini_or_smart_fallback(query: str, current_user: Dict[str, Any], se
 
     if GEMINI_API_KEY and GEMINI_API_KEY.strip():
         try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY.strip()}"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY.strip()}"
             
             conn = get_db_connection()
             c = conn.cursor()
