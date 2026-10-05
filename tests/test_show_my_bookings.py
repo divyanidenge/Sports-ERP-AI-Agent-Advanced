@@ -45,7 +45,7 @@ def test_student_booking_isolation_and_ownership(client, student_token, admin_to
         facility_id=1,
         sport_id=1,
         booking_date="2026-11-20",
-        time_slot="06:00 - 07:00",
+        start_time="06:00", end_time="07:00",
         notes="Student A Private Match"
     )
     b_res_a = sports_service.create_booking(2, b_data_a)
@@ -55,7 +55,7 @@ def test_student_booking_isolation_and_ownership(client, student_token, admin_to
         facility_id=1,
         sport_id=1,
         booking_date="2026-11-21",
-        time_slot="07:00 - 08:00",
+        start_time="07:00", end_time="08:00",
         notes="Student B Private Match"
     )
     b_res_b = sports_service.create_booking(3, b_data_b)

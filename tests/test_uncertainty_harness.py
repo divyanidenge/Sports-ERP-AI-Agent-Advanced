@@ -28,7 +28,7 @@ def test_high_risk_consequential_booking_action():
         query="Book badminton tomorrow at 5 PM",
         user_id=2,
         user_role="student",
-        detected_params={"sport_name": "Badminton", "booking_date": "2026-09-01", "time_slot": "17:00 - 18:00"}
+        detected_params={"sport_name": "Badminton", "booking_date": "2026-09-01", "start_time": "17:00", "end_time": "18:00"}
     )
     assert res.tier == UncertaintyTier.HIGH_RISK_CONFIRMATION
     assert res.action_type == "booking"
@@ -44,8 +44,8 @@ def test_ambiguous_cancellation_triggers_disambiguation():
     target_date = (date.today() + timedelta(days=4)).isoformat()
 
     # Create 2 bookings for student 2 on same day
-    b1 = sports_service.create_booking(2, BookingCreate(facility_id=2, sport_id=2, booking_date=target_date, time_slot="06:00 - 07:00"))
-    b2 = sports_service.create_booking(2, BookingCreate(facility_id=2, sport_id=2, booking_date=target_date, time_slot="08:00 - 09:00"))
+    b1 = sports_service.create_booking(2, BookingCreate(facility_id=2, sport_id=2, booking_date=target_date, start_time="06:00", end_time="07:00"))
+    b2 = sports_service.create_booking(2, BookingCreate(facility_id=2, sport_id=2, booking_date=target_date, start_time="08:00", end_time="09:00"))
 
     res = evaluate_uncertainty(
         query="Cancel my booking tomorrow",

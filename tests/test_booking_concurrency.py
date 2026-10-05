@@ -61,7 +61,7 @@ def test_idempotency_key_prevents_duplicate_booking(client, student_token):
         "facility_id": 2, # Badminton Court 2
         "sport_id": 2,
         "booking_date": "2026-11-21",
-        "time_slot": "16:00 - 17:00",
+        "start_time": "16:00", "end_time": "17:00",
         "notes": "Idempotent booking test",
         "idempotency_key": idemp_key
     }

@@ -87,7 +87,7 @@ def test_ownership_verified_booking_cancellation(client, student_token, admin_to
         "facility_id": 1,
         "sport_id": 2,
         "booking_date": "2026-09-10",
-        "time_slot": "06:00 - 07:00",
+        "start_time": "06:00", "end_time": "07:00",
         "notes": "Rahul booking"
     }, headers=s_headers)
     assert b_resp.status_code == 200

@@ -180,7 +180,15 @@ def check_availability(sport_name: str, booking_date: str, time_slot: str) -> Di
         req_start, req_end = "", ""
         
     for fac in facilities:
-        if req_start and req_end and (req_start < fac.get("open_time", "06:00") or req_end > fac.get("close_time", "22:00")):
+        is_outside = False
+        if req_start and req_end:
+            fac_open = fac.get("open_time", "06:00")
+            fac_close = fac.get("close_time", "22:00")
+            eff_req_end = "24:00" if req_end == "00:00" else req_end
+            eff_fac_close = "24:00" if fac_close == "00:00" else fac_close
+            if req_start < fac_open or eff_req_end > eff_fac_close:
+                is_outside = True
+        if is_outside:
             continue # Slot is outside operating hours for this facility
             
         cursor.execute(

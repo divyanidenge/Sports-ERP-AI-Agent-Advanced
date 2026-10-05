@@ -87,7 +87,7 @@ def extract_date(text: str, fallback_date: Optional[str] = None) -> str:
     explicit = extract_date_explicit(text)
     if explicit:
         return explicit
-    return fallback_date or (date.today() + timedelta(days=1)).isoformat()
+    return fallback_date or date.today().isoformat()
 
 def extract_time_slot(text: str, fallback_slot: Optional[str] = None) -> Optional[str]:
     """
@@ -345,7 +345,7 @@ def extract_tournament_params(text: str) -> Dict[str, Any]:
     elif re.search(r"\b(?:in|over|for|across)\s+(?:a\s+)?single\s+day\b", low) or re.search(r"\bone[-\s]+day\b", low) or re.search(r"\b1[-\s]+day\b", low):
         day_count = 1
 
-    start_date_str = extract_date(text) or (date.today() + timedelta(days=1)).isoformat()
+    start_date_str = extract_date(text) or date.today().isoformat()
     start_dt = datetime.strptime(start_date_str, "%Y-%m-%d").date()
 
     if day_count and day_count >= 1:
@@ -1504,7 +1504,7 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
 
     if is_forecast_query:
         sport = extract_sport(q)
-        b_date = extract_date_explicit(q) or (date.today() + timedelta(days=1)).isoformat()
+        b_date = extract_date_explicit(q) or date.today().isoformat()
         t_slot = extract_time_slot(q)
         
         is_highest_query = any(k in q for k in ["highest", "busiest", "most busy", "top demand", "peak demand"])
@@ -1616,7 +1616,7 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
 
     if should_run_booking_or_avail:
         detected_sport = sport_in_query or session["last_entities"].get("sport")
-        detected_date = date_in_query or session["last_entities"].get("date") or (date.today() + timedelta(days=1)).isoformat()
+        detected_date = date_in_query or session["last_entities"].get("date") or date.today().isoformat()
         
         if resolved_slot_in_q:
             detected_slot = resolved_slot_in_q
@@ -1643,11 +1643,40 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
                 )
 
         if not detected_sport:
-            return QueryResponse(
-                intent="missing_sport",
-                message="Which sport would you like to check or book? (e.g. Badminton, Cricket, Football, Basketball, Swimming, Table Tennis)",
-                success=True
-            )
+            if GEMINI_API_KEY and GEMINI_API_KEY.strip():
+                conn = get_db_connection()
+                c = conn.cursor()
+                c.execute("SELECT name FROM sports")
+                sports_list = [row["name"] for row in c.fetchall()]
+                conn.close()
+                sports_str = ", ".join(sports_list) if sports_list else "no sports currently registered"
+
+                sys_prompt = (
+                    f"You are the Campus Sports ERP AI Assistant. The user's query about bookings or availability lacks a valid campus sport. "
+                    f"Our campus ONLY supports: {sports_str}. "
+                    "If they asked about a sport NOT in this list, politely inform them it is not available and list what is. "
+                    "If they didn't mention ANY sport at all, politely ask them which sport they would like to check or book. "
+                    "Be brief and helpful."
+                )
+                gemini_resp = handle_gemini_or_smart_fallback(raw_query, current_user, session, override_sys_prompt=sys_prompt)
+                return QueryResponse(
+                    intent="missing_sport",
+                    message=gemini_resp.message,
+                    success=False
+                )
+            else:
+                conn = get_db_connection()
+                c = conn.cursor()
+                c.execute("SELECT name FROM sports LIMIT 6")
+                example_sports = [row["name"] for row in c.fetchall()]
+                conn.close()
+                example_str = ", ".join(example_sports) if example_sports else "Badminton, Cricket"
+                
+                return QueryResponse(
+                    intent="missing_sport",
+                    message=f"Which sport would you like to check or book? (e.g. {example_str})",
+                    success=True
+                )
         
         session["last_entities"]["sport"] = detected_sport
         session["last_entities"]["date"] = detected_date
@@ -1662,6 +1691,50 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
                 success=False
             )
         
+        if detected_date == today_iso and detected_slot:
+            try:
+                start_time_str = detected_slot.split("-")[0].strip()
+                slot_start_time = datetime.strptime(start_time_str, "%H:%M").time()
+                if slot_start_time <= datetime.now().time():
+                    alt_today = tools.find_alternative_slots(detected_sport, detected_date)
+                    slots_today = alt_today.get("available_slots", [])
+                    upcoming_slots = []
+                    now_time = datetime.now().time()
+                    for s in slots_today:
+                        try:
+                            s_start = datetime.strptime(s.split("-")[0].strip(), "%H:%M").time()
+                            if s_start > now_time:
+                                upcoming_slots.append(s)
+                        except Exception:
+                            pass
+                    
+                    tomorrow_date = (date.today() + timedelta(days=1)).isoformat()
+                    alt_tomorrow = tools.find_alternative_slots(detected_sport, tomorrow_date)
+                    slots_tomorrow = alt_tomorrow.get("available_slots", [])
+                    
+                    time_12hr = slot_start_time.strftime("%I %p").lstrip('0')
+                    msg_parts = [f"{time_12hr} has passed."]
+                    
+                    if upcoming_slots:
+                        upcoming_str_list = []
+                        for s in upcoming_slots[:3]:
+                            s_start_time = datetime.strptime(s.split("-")[0].strip(), "%H:%M").time()
+                            upcoming_str_list.append(s_start_time.strftime("%I %p").lstrip('0'))
+                        msg_parts.append(f"Available upcoming slots today: {', '.join(upcoming_str_list)}.")
+                    else:
+                        msg_parts.append("No more slots available today.")
+                        
+                    if detected_slot in slots_tomorrow:
+                        msg_parts.append(f"Or I can book tomorrow at {time_12hr}.")
+                    
+                    return QueryResponse(
+                        intent="booking_failed",
+                        message=" ".join(msg_parts),
+                        success=False
+                    )
+            except Exception:
+                pass
+
         # Case A: Slot is not specified -> list all available slots from real SQLite DB
         if not detected_slot:
             alt = tools.find_alternative_slots(detected_sport, detected_date)
@@ -1748,7 +1821,7 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
     # --- 15. GEMINI FUNCTION CALLING / FALLBACK ---
     return handle_gemini_or_smart_fallback(raw_query, current_user, session)
 
-def handle_gemini_or_smart_fallback(query: str, current_user: Dict[str, Any], session: Dict[str, Any]) -> QueryResponse:
+def handle_gemini_or_smart_fallback(query: str, current_user: Dict[str, Any], session: Dict[str, Any], override_sys_prompt: Optional[str] = None) -> QueryResponse:
     """Invokes Gemini LLM if key is configured, or provides context-aware campus answers in English."""
     user_name = current_user.get("name", "User")
     user_role = current_user.get("role", "student")
@@ -1756,9 +1829,18 @@ def handle_gemini_or_smart_fallback(query: str, current_user: Dict[str, Any], se
     if GEMINI_API_KEY and GEMINI_API_KEY.strip():
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY.strip()}"
-            system_prompt = (
+            
+            conn = get_db_connection()
+            c = conn.cursor()
+            c.execute("SELECT name FROM sports")
+            sports_list = [row["name"] for row in c.fetchall()]
+            conn.close()
+            sports_str = ", ".join(sports_list) if sports_list else "no sports currently registered"
+
+            system_prompt = override_sys_prompt if override_sys_prompt else (
                 f"You are the Campus Sports ERP AI Assistant. Logged in user: {user_name} (Role: {user_role}). "
                 "Help with facility information, campus sports rules, booking guidance, and query interpretation. "
+                f"Our campus ONLY supports the following sports: {sports_str}. "
                 "Always respond in professional English."
             )
             payload = {

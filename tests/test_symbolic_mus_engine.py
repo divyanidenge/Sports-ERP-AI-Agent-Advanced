@@ -24,7 +24,7 @@ def test_symbolic_satisfiable_request(client, student_token):
         user_id=2,
         sport_name="Badminton",
         booking_date=target_date,
-        time_slot="07:00 - 08:00",
+        start_time="07:00", end_time="08:00",
         user_role="student"
     )
     assert res.is_satisfiable is True
@@ -39,7 +39,7 @@ def test_single_clause_violation_mus():
         user_id=2,
         sport_name="Badminton",
         booking_date=target_date,
-        time_slot="22:00 - 23:00", # Out of hours
+        start_time="22:00", end_time="23:00", # Out of hours
         user_role="student"
     )
     assert res.is_satisfiable is False
@@ -66,7 +66,7 @@ def test_multiple_simultaneous_violations_mus():
         user_id=4, # Blocked user
         sport_name="Badminton",
         booking_date="2020-01-01", # Past date (C4)
-        time_slot="12:00 - 13:00", # Out of hours (C3)
+        start_time="12:00", end_time="13:00", # Out of hours (C3)
         user_role="student"
     )
     assert res.is_satisfiable is False
@@ -88,15 +88,15 @@ def test_mcs_minimal_relaxation_generation(client):
     target_date = (date.today() + timedelta(days=5)).isoformat()
     
     # Book all badminton courts at 17:00 - 18:00
-    b1 = sports_service.create_booking(1, BookingCreate(facility_id=2, sport_id=2, booking_date=target_date, time_slot="17:00 - 18:00"))
-    b2 = sports_service.create_booking(1, BookingCreate(facility_id=3, sport_id=2, booking_date=target_date, time_slot="17:00 - 18:00"))
+    b1 = sports_service.create_booking(1, BookingCreate(facility_id=2, sport_id=2, booking_date=target_date, start_time="17:00", end_time="18:00"))
+    b2 = sports_service.create_booking(1, BookingCreate(facility_id=3, sport_id=2, booking_date=target_date, start_time="17:00", end_time="18:00"))
 
     # Attempt student booking on fully occupied slot
     res = evaluate_booking_mus_mcs(
         user_id=2,
         sport_name="Badminton",
         booking_date=target_date,
-        time_slot="17:00 - 18:00",
+        start_time="17:00", end_time="18:00",
         user_role="student"
     )
     assert res.is_satisfiable is False

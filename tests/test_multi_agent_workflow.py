@@ -100,7 +100,7 @@ def test_reflector_catches_invalid_request():
             subtask_id=1,
             agent_name="BookingAgent",
             action_name="create_booking",
-            params={"sport_name": "Badminton", "booking_date": target_date, "time_slot": "23:00 - 00:00"}
+            params={"sport_name": "Badminton", "booking_date": target_date, "start_time": "23:00", "end_time": "00:00"}
         )
     ]
 

@@ -87,6 +87,21 @@ def validate_booking_request(
                 explanation=f"Cannot book for past date '{booking_date}'. Campus facilities can only be booked from today onwards."
             )
 
+        if req_date == today:
+            try:
+                start_time_str = time_slot.split("-")[0].strip()
+                slot_start_time = datetime.strptime(start_time_str, "%H:%M").time()
+                current_time = datetime.now().time()
+                if slot_start_time <= current_time:
+                    return ConstraintValidationResult(
+                        is_valid=False,
+                        code="C4_PAST_TIME",
+                        constraint_name="Temporal Validity",
+                        explanation=f"Cannot book for past time slot '{time_slot}' today. Campus facilities can only be booked for upcoming time slots."
+                    )
+            except Exception:
+                pass
+
         max_date = today + timedelta(days=MAX_ADVANCE_BOOKING_DAYS)
         if req_date > max_date:
             return ConstraintValidationResult(

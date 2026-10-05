@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-09-27",
+  "timestamp": "2026-09-29",
   "total_scenarios_evaluated": 30,
   "paradigms_compared": [
     "react_baseline",
@@ -19,7 +19,7 @@
     "text_to_sql": {
       "task_completion_rate_pct": 63.3,
       "constraint_violation_rate_pct": 0.0,
-      "mean_latency_ms": 0.12,
+      "mean_latency_ms": 0.1,
       "std_latency_ms": 0.09,
       "mean_token_cost": 680.0,
       "safety_violations": 0
@@ -35,17 +35,17 @@
     "proposed_hybrid": {
       "task_completion_rate_pct": 100.0,
       "constraint_violation_rate_pct": 0.0,
-      "mean_latency_ms": 1.21,
-      "std_latency_ms": 0.52,
+      "mean_latency_ms": 1.34,
+      "std_latency_ms": 2.07,
       "mean_token_cost": 420.0,
       "safety_violations": 0
     }
   },
   "statistical_tests": {
     "proposed_vs_text_to_sql": {
-      "t_stat": 11.241,
-      "cohens_d": 2.902,
-      "mean_delta": 1.091
+      "t_stat": 3.267,
+      "cohens_d": 0.843,
+      "mean_delta": 1.233
     }
   },
   "scenarios": [
@@ -53,23 +53,23 @@
       "id": "T1_01",
       "tier": "Tier 1: Analytical",
       "query": "Show my bookings",
-      "proposed_latency_ms": 1.47,
-      "text_to_sql_latency_ms": 0.17,
+      "proposed_latency_ms": 1.41,
+      "text_to_sql_latency_ms": 0.21,
       "proposed_success": true
     },
     {
       "id": "T1_02",
       "tier": "Tier 1: Analytical",
       "query": "Meri active bookings kya hain?",
-      "proposed_latency_ms": 0.92,
-      "text_to_sql_latency_ms": 0.11,
+      "proposed_latency_ms": 0.99,
+      "text_to_sql_latency_ms": 0.17,
       "proposed_success": true
     },
     {
       "id": "T1_03",
       "tier": "Tier 1: Analytical",
       "query": "Show my cancelled bookings",
-      "proposed_latency_ms": 1.75,
+      "proposed_latency_ms": 12.1,
       "text_to_sql_latency_ms": 0.18,
       "proposed_success": true
     },
@@ -77,63 +77,63 @@
       "id": "T1_04",
       "tier": "Tier 1: Analytical",
       "query": "What sports are available?",
-      "proposed_latency_ms": 0.77,
-      "text_to_sql_latency_ms": 0.26,
+      "proposed_latency_ms": 0.59,
+      "text_to_sql_latency_ms": 0.1,
       "proposed_success": true
     },
     {
       "id": "T1_05",
       "tier": "Tier 1: Analytical",
       "query": "Which facilities are available?",
-      "proposed_latency_ms": 0.77,
-      "text_to_sql_latency_ms": 0.14,
+      "proposed_latency_ms": 0.66,
+      "text_to_sql_latency_ms": 0.12,
       "proposed_success": true
     },
     {
       "id": "T1_06",
       "tier": "Tier 1: Analytical",
       "query": "What badminton slots are available tomorrow?",
-      "proposed_latency_ms": 0.76,
-      "text_to_sql_latency_ms": 0.23,
+      "proposed_latency_ms": 0.57,
+      "text_to_sql_latency_ms": 0.15,
       "proposed_success": true
     },
     {
       "id": "T1_07",
       "tier": "Tier 1: Analytical",
       "query": "Which sport is most popular?",
-      "proposed_latency_ms": 1.88,
-      "text_to_sql_latency_ms": 0.27,
+      "proposed_latency_ms": 1.25,
+      "text_to_sql_latency_ms": 0.16,
       "proposed_success": true
     },
     {
       "id": "T1_08",
       "tier": "Tier 1: Analytical",
       "query": "What is the peak booking hour?",
-      "proposed_latency_ms": 2.44,
-      "text_to_sql_latency_ms": 0.21,
+      "proposed_latency_ms": 1.55,
+      "text_to_sql_latency_ms": 0.14,
       "proposed_success": true
     },
     {
       "id": "T1_09",
       "tier": "Tier 1: Analytical",
       "query": "Show facility utilization",
-      "proposed_latency_ms": 1.65,
-      "text_to_sql_latency_ms": 0.25,
+      "proposed_latency_ms": 1.23,
+      "text_to_sql_latency_ms": 0.15,
       "proposed_success": true
     },
     {
       "id": "T1_10",
       "tier": "Tier 1: Analytical",
       "query": "Sports ERP ka overview batao",
-      "proposed_latency_ms": 1.1,
-      "text_to_sql_latency_ms": 0.09,
+      "proposed_latency_ms": 1.26,
+      "text_to_sql_latency_ms": 0.12,
       "proposed_success": true
     },
     {
       "id": "T2_01",
       "tier": "Tier 2: Transactional",
       "query": "Book badminton tomorrow at 5 PM",
-      "proposed_latency_ms": 0.92,
+      "proposed_latency_ms": 1.07,
       "text_to_sql_latency_ms": 0.01,
       "proposed_success": true
     },
@@ -141,7 +141,7 @@
       "id": "T2_02",
       "tier": "Tier 2: Transactional",
       "query": "Book cricket tomorrow at 8 AM",
-      "proposed_latency_ms": 0.85,
+      "proposed_latency_ms": 0.92,
       "text_to_sql_latency_ms": 0.01,
       "proposed_success": true
     },
@@ -149,7 +149,7 @@
       "id": "T2_03",
       "tier": "Tier 2: Transactional",
       "query": "Cancel booking #1",
-      "proposed_latency_ms": 1.34,
+      "proposed_latency_ms": 1.47,
       "text_to_sql_latency_ms": 0.01,
       "proposed_success": true
     },
@@ -157,7 +157,7 @@
       "id": "T2_04",
       "tier": "Tier 2: Transactional",
       "query": "Cancel booking #999",
-      "proposed_latency_ms": 1.75,
+      "proposed_latency_ms": 1.48,
       "text_to_sql_latency_ms": 0.01,
       "proposed_success": true
     },
@@ -165,7 +165,7 @@
       "id": "T2_05",
       "tier": "Tier 2: Transactional",
       "query": "Rahul ko block kar do",
-      "proposed_latency_ms": 0.72,
+      "proposed_latency_ms": 0.54,
       "text_to_sql_latency_ms": 0.01,
       "proposed_success": true
     },
@@ -173,7 +173,7 @@
       "id": "T2_06",
       "tier": "Tier 2: Transactional",
       "query": "Student tries to block admin",
-      "proposed_latency_ms": 0.78,
+      "proposed_latency_ms": 0.46,
       "text_to_sql_latency_ms": 0.01,
       "proposed_success": true
     },
@@ -181,7 +181,7 @@
       "id": "T2_07",
       "tier": "Tier 2: Transactional",
       "query": "Unblock user #2",
-      "proposed_latency_ms": 0.87,
+      "proposed_latency_ms": 0.44,
       "text_to_sql_latency_ms": 0.01,
       "proposed_success": true
     },
@@ -189,7 +189,7 @@
       "id": "T2_08",
       "tier": "Tier 2: Transactional",
       "query": "Show all registered users",
-      "proposed_latency_ms": 1.12,
+      "proposed_latency_ms": 0.71,
       "text_to_sql_latency_ms": 0.14,
       "proposed_success": true
     },
@@ -197,23 +197,23 @@
       "id": "T2_09",
       "tier": "Tier 2: Transactional",
       "query": "Student requests all users directory",
-      "proposed_latency_ms": 0.65,
-      "text_to_sql_latency_ms": 0.19,
+      "proposed_latency_ms": 0.74,
+      "text_to_sql_latency_ms": 0.21,
       "proposed_success": true
     },
     {
       "id": "T2_10",
       "tier": "Tier 2: Transactional",
       "query": "Show my attendance",
-      "proposed_latency_ms": 0.62,
-      "text_to_sql_latency_ms": 0.14,
+      "proposed_latency_ms": 0.77,
+      "text_to_sql_latency_ms": 0.12,
       "proposed_success": true
     },
     {
       "id": "T3_01",
       "tier": "Tier 3: Multi-Agent / Conflict",
       "query": "Book badminton tomorrow at 11 PM",
-      "proposed_latency_ms": 1.5,
+      "proposed_latency_ms": 0.92,
       "text_to_sql_latency_ms": 0.01,
       "proposed_success": true
     },
@@ -221,23 +221,23 @@
       "id": "T3_02",
       "tier": "Tier 3: Multi-Agent / Conflict",
       "query": "Book badminton on 2020-01-01",
-      "proposed_latency_ms": 2.07,
-      "text_to_sql_latency_ms": 0.02,
+      "proposed_latency_ms": 1.1,
+      "text_to_sql_latency_ms": 0.01,
       "proposed_success": true
     },
     {
       "id": "T3_03",
       "tier": "Tier 3: Multi-Agent / Conflict",
       "query": "Book slot when fully occupied",
-      "proposed_latency_ms": 1.77,
-      "text_to_sql_latency_ms": 0.13,
+      "proposed_latency_ms": 1.35,
+      "text_to_sql_latency_ms": 0.12,
       "proposed_success": true
     },
     {
       "id": "T3_04",
       "tier": "Tier 3: Multi-Agent / Conflict",
       "query": "Blocked student attempts booking",
-      "proposed_latency_ms": 1.35,
+      "proposed_latency_ms": 1.08,
       "text_to_sql_latency_ms": 0.01,
       "proposed_success": true
     },
@@ -245,7 +245,7 @@
       "id": "T3_05",
       "tier": "Tier 3: Multi-Agent / Conflict",
       "query": "Student quota limit exceeded",
-      "proposed_latency_ms": 0.86,
+      "proposed_latency_ms": 0.53,
       "text_to_sql_latency_ms": 0.11,
       "proposed_success": true
     },
@@ -253,7 +253,7 @@
       "id": "T3_06",
       "tier": "Tier 3: Multi-Agent / Conflict",
       "query": "Incompatible sport facility allocation",
-      "proposed_latency_ms": 0.58,
+      "proposed_latency_ms": 0.68,
       "text_to_sql_latency_ms": 0.01,
       "proposed_success": true
     },
@@ -261,32 +261,32 @@
       "id": "T3_07",
       "tier": "Tier 3: Multi-Agent / Conflict",
       "query": "Cancel my booking tomorrow (Ambiguous)",
-      "proposed_latency_ms": 2.21,
-      "text_to_sql_latency_ms": 0.19,
+      "proposed_latency_ms": 1.72,
+      "text_to_sql_latency_ms": 0.17,
       "proposed_success": true
     },
     {
       "id": "T3_08",
       "tier": "Tier 3: Multi-Agent / Conflict",
       "query": "Check availability then Yes to confirm",
-      "proposed_latency_ms": 0.98,
-      "text_to_sql_latency_ms": 0.19,
+      "proposed_latency_ms": 0.64,
+      "text_to_sql_latency_ms": 0.1,
       "proposed_success": true
     },
     {
       "id": "T3_09",
       "tier": "Tier 3: Multi-Agent / Conflict",
       "query": "Who am I during pending confirmation",
-      "proposed_latency_ms": 0.88,
-      "text_to_sql_latency_ms": 0.18,
+      "proposed_latency_ms": 0.53,
+      "text_to_sql_latency_ms": 0.23,
       "proposed_success": true
     },
     {
       "id": "T3_10",
       "tier": "Tier 3: Multi-Agent / Conflict",
       "query": "Confirm on expired pending context",
-      "proposed_latency_ms": 0.81,
-      "text_to_sql_latency_ms": 0.16,
+      "proposed_latency_ms": 1.34,
+      "text_to_sql_latency_ms": 0.32,
       "proposed_success": true
     }
   ]

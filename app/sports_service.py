@@ -242,14 +242,16 @@ def create_booking(user_id: int, data: BookingCreate) -> BookingResponse:
         conn.close()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Facility is currently marked unavailable for booking.")
     
-    if data.start_time < fac["open_time"] or data.end_time > fac["close_time"]:
+    eff_data_end = "24:00" if data.end_time == "00:00" else data.end_time
+    eff_fac_close = "24:00" if fac["close_time"] == "00:00" else fac["close_time"]
+    if data.start_time < fac["open_time"] or eff_data_end > eff_fac_close:
         conn.close()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Requested slot {data.start_time} - {data.end_time} is outside facility operating hours ({fac['open_time']} - {fac['close_time']})."
         )
     
-    if data.start_time >= data.end_time:
+    if data.start_time >= eff_data_end:
         conn.close()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Start time must be before end time.")
 

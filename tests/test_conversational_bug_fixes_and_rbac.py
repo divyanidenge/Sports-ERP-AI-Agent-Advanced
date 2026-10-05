@@ -13,7 +13,7 @@ def test_ambiguous_cancellation_with_multiple_active_bookings(client, student_to
         "facility_id": 1,
         "sport_id": 1,
         "booking_date": ambig_date,
-        "time_slot": "06:00 - 07:00",
+        "start_time": "06:00", "end_time": "07:00",
         "notes": "Slot 1"
     }, headers=headers)
     assert resp1.status_code == 200
@@ -22,7 +22,7 @@ def test_ambiguous_cancellation_with_multiple_active_bookings(client, student_to
         "facility_id": 2,
         "sport_id": 1,
         "booking_date": ambig_date,
-        "time_slot": "07:00 - 08:00",
+        "start_time": "07:00", "end_time": "08:00",
         "notes": "Slot 2"
     }, headers=headers)
     assert resp2.status_code == 200
@@ -55,7 +55,7 @@ def test_ambiguous_badminton_cancellation_shows_active_only(client, student_toke
         "facility_id": 2,
         "sport_id": 2,
         "booking_date": target_date,
-        "time_slot": "09:00 - 10:00",
+        "start_time": "09:00", "end_time": "10:00",
         "notes": "Badminton Active"
     }, headers=headers)
     assert resp1.status_code == 200
@@ -65,7 +65,7 @@ def test_ambiguous_badminton_cancellation_shows_active_only(client, student_toke
         "facility_id": 3,
         "sport_id": 2,
         "booking_date": target_date,
-        "time_slot": "10:00 - 11:00",
+        "start_time": "10:00", "end_time": "11:00",
         "notes": "Badminton To Cancel"
     }, headers=headers)
     assert resp2.status_code == 200
@@ -278,14 +278,14 @@ def test_multiturn_cancellation_selection_flow(client, student_token):
         "facility_id": 2,
         "sport_id": 2,
         "booking_date": test_d,
-        "time_slot": "07:00 - 08:00",
+        "start_time": "07:00", "end_time": "08:00",
         "notes": "Slot A"
     }, headers=headers).json()
     r2 = client.post("/bookings", json={
         "facility_id": 3,
         "sport_id": 2,
         "booking_date": test_d,
-        "time_slot": "08:00 - 09:00",
+        "start_time": "08:00", "end_time": "09:00",
         "notes": "Slot B"
     }, headers=headers).json()
     
@@ -366,7 +366,7 @@ def test_student_daily_quota_limit_c6(client, student_token):
         "facility_id": 1,
         "sport_id": 1,
         "booking_date": quota_date,
-        "time_slot": "06:00 - 07:00"
+        "start_time": "06:00", "end_time": "07:00"
     }, headers=headers)
     assert r1.status_code == 200
     
@@ -375,7 +375,7 @@ def test_student_daily_quota_limit_c6(client, student_token):
         "facility_id": 2,
         "sport_id": 2,
         "booking_date": quota_date,
-        "time_slot": "07:00 - 08:00"
+        "start_time": "07:00", "end_time": "08:00"
     }, headers=headers)
     assert r2.status_code == 200
     
@@ -384,7 +384,7 @@ def test_student_daily_quota_limit_c6(client, student_token):
         "facility_id": 3,
         "sport_id": 2,
         "booking_date": quota_date,
-        "time_slot": "08:00 - 09:00"
+        "start_time": "08:00", "end_time": "09:00"
     }, headers=headers)
     assert r3.status_code == 400
     assert "quota" in r3.json()["detail"].lower() or "limit" in r3.json()["detail"].lower()
@@ -419,7 +419,7 @@ def test_multi_turn_cancellation_explicit_sport_filter_zero_candidates(client, s
         "facility_id": 5,
         "sport_id": 4,
         "booking_date": target_d,
-        "time_slot": "16:00 - 17:00"
+        "start_time": "16:00", "end_time": "17:00"
     }, headers=headers)
 
     # Ask for badminton options (where user has 0 bookings)
@@ -447,8 +447,8 @@ def test_ordinal_and_booking_id_followup_cancellation(client, student_token):
     session_id = "test_id_followup_session"
     
     # Create two active bookings
-    r1 = client.post("/bookings", json={"facility_id": 1, "sport_id": 1, "booking_date": target_d, "time_slot": "06:00 - 07:00"}, headers=headers).json()
-    r2 = client.post("/bookings", json={"facility_id": 1, "sport_id": 1, "booking_date": target_d, "time_slot": "07:00 - 08:00"}, headers=headers).json()
+    r1 = client.post("/bookings", json={"facility_id": 1, "sport_id": 1, "booking_date": target_d, "start_time": "06:00", "end_time": "07:00"}, headers=headers).json()
+    r2 = client.post("/bookings", json={"facility_id": 1, "sport_id": 1, "booking_date": target_d, "start_time": "07:00", "end_time": "08:00"}, headers=headers).json()
     b1_id = r1["id"]
     b2_id = r2["id"]
 
@@ -482,7 +482,7 @@ def test_restore_cancelled_booking_flow_and_audit(client, student_token):
     target_d = (date.today() + timedelta(days=14)).isoformat()
     
     # 1. Create and cancel a booking
-    r = client.post("/bookings", json={"facility_id": 2, "sport_id": 2, "booking_date": target_d, "time_slot": "06:00 - 07:00"}, headers=headers).json()
+    r = client.post("/bookings", json={"facility_id": 2, "sport_id": 2, "booking_date": target_d, "start_time": "06:00", "end_time": "07:00"}, headers=headers).json()
     b_id = r["id"]
     client.delete(f"/bookings/{b_id}", headers=headers)
 

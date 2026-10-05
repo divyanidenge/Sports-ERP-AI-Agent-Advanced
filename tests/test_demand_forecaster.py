@@ -40,7 +40,7 @@ def test_predict_congestion_inference():
     res = forecaster.predict_congestion(
         sport_name="Badminton",
         booking_date="2026-10-15",
-        time_slot="18:00 - 19:00"
+        start_time="18:00", end_time="19:00"
     )
 
     assert res["sport_name"] == "Badminton"

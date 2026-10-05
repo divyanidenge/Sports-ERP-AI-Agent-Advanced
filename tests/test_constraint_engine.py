@@ -21,7 +21,7 @@ def test_operating_hours_constraint():
         user_id=2,
         sport_name="Badminton",
         booking_date="2026-11-20",
-        time_slot="22:00 - 23:00",
+        start_time="22:00", end_time="23:00",
         user_role="student"
     )
     assert res.is_valid is False
@@ -36,7 +36,7 @@ def test_past_date_constraint():
         user_id=2,
         sport_name="Badminton",
         booking_date=past_date,
-        time_slot="17:00 - 18:00",
+        start_time="17:00", end_time="18:00",
         user_role="student"
     )
     assert res.is_valid is False
@@ -50,7 +50,7 @@ def test_advance_booking_window_constraint():
         user_id=2,
         sport_name="Badminton",
         booking_date=far_future_date,
-        time_slot="17:00 - 18:00",
+        start_time="17:00", end_time="18:00",
         user_role="student"
     )
     assert res.is_valid is False
@@ -66,7 +66,7 @@ def test_blocked_user_constraint(client, admin_token):
         user_id=4,
         sport_name="Badminton",
         booking_date="2026-11-20",
-        time_slot="17:00 - 18:00",
+        start_time="17:00", end_time="18:00",
         user_role="student"
     )
     assert res.is_valid is False
@@ -83,7 +83,7 @@ def test_sport_facility_compatibility_constraint():
         user_id=2,
         sport_name="Badminton",
         booking_date="2026-11-20",
-        time_slot="17:00 - 18:00",
+        start_time="17:00", end_time="18:00",
         facility_id=1,
         user_role="student"
     )
@@ -118,7 +118,7 @@ def test_student_booking_quota_constraint(client):
         user_id=student_id,
         sport_name="Badminton",
         booking_date=(date.today() + timedelta(days=9)).isoformat(),
-        time_slot="18:00 - 19:00",
+        start_time="18:00", end_time="19:00",
         user_role="student"
     )
     assert res.is_valid is False
@@ -132,7 +132,7 @@ def test_student_booking_quota_constraint(client):
 def test_cancellation_ownership_and_state_constraints():
     """C8: Validates cancellation ownership and state invariants."""
     # Create booking for Student 2
-    b = sports_service.create_booking(2, BookingCreate(facility_id=2, sport_id=2, booking_date="2026-11-29", time_slot="17:00 - 18:00"))
+    b = sports_service.create_booking(2, BookingCreate(facility_id=2, sport_id=2, booking_date="2026-11-29", start_time="17:00", end_time="18:00"))
 
     # Student 3 attempts to cancel Student 2's booking -> rejected
     res_unauth = validate_cancellation_request(booking_id=b.id, user_id=3, user_role="student")
