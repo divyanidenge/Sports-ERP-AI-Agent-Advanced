@@ -152,12 +152,14 @@ def extract_time_slot(text: str, fallback_slot: Optional[str] = None) -> Optiona
     low = re.sub(r"\b\d{4}-\d{2}-\d{2}\b", " ", text.lower())
     low = re.sub(r"\b\d{1,2}/\d{1,2}/\d{4}\b", " ", low).strip()
     
-    # 1. Direct match for standard range (e.g. "06:00 - 07:00", "09:00 - 10:00", "17:00 to 18:00")
-    m_range = re.search(r"\b(0?\d|1\d|2[0-3]):00\s*(?:-|to)\s*(0?\d|1\d|2[0-3]):00\b", low)
+    # 1. Direct match for standard range (e.g. "06:30 - 07:30", "09:00 - 10:00", "17:00 to 18:00")
+    m_range = re.search(r"\b(0?\d|1\d|2[0-3]):([0-5]\d)\s*(?:-|to)\s*(0?\d|1\d|2[0-3]):([0-5]\d)\b", low)
     if m_range:
         h1 = int(m_range.group(1))
-        h2 = int(m_range.group(2))
-        return f"{h1:02d}:00 - {h2:02d}:00"
+        m1 = int(m_range.group(2))
+        h2 = int(m_range.group(3))
+        m2 = int(m_range.group(4))
+        return f"{h1:02d}:{m1:02d} - {h2:02d}:{m2:02d}"
 
     # 2. Number to number with AM/PM/subah/shaam (e.g. "8 to 9 am", "8-9 am", "5 to 6 pm", "5-6", "8 to 9")
     m_range_num = re.search(r"\b(0?\d|1\d|2[0-3])\s*(?:-|to)\s*(0?\d|1\d|2[0-3])\s*(am|pm|subah|shaam|evening|night)?\b", low)
@@ -176,16 +178,20 @@ def extract_time_slot(text: str, fallback_slot: Optional[str] = None) -> Optiona
             h2 += 12
         return f"{h1:02d}:00 - {h2:02d}:00"
 
-    # 3. Explicit AM / PM times (e.g. "9 am", "9am", "9:00 am", "5 pm", "5pm", "12 pm", "12 am", "7 am")
-    m_ampm = re.search(r"\b(0?\d|1\d|2[0-3])(?::([0-5]\d))?\s*(am|pm)\b", low)
+    # 3. Explicit AM / PM times (e.g. "9 am", "9am", "9:00 am", "5 pm", "5pm", "12 pm", "12 am", "7 am", "3 30 pm")
+    m_ampm = re.search(r"\b(0?\d|1\d|2[0-3])(?:[:. ]([0-5]\d))?\s*(am|pm)\b", low)
     if m_ampm:
         h = int(m_ampm.group(1))
+        m = int(m_ampm.group(2)) if m_ampm.group(2) else 0
         merid = m_ampm.group(3)
         if merid == "pm" and h != 12:
             h += 12
         elif merid == "am" and h == 12:
             h = 0
-        return f"{h:02d}:00 - {(h + 1) % 24:02d}:00"
+        
+        # Determine end time (default to 1 hour duration)
+        end_h = (h + 1) % 24
+        return f"{h:02d}:{m:02d} - {end_h:02d}:{m:02d}"
 
     # 4. Hinglish expressions (e.g. "subah 9 baje", "9 baje subah", "shaam 5 baje", "5 baje shaam", "5 baje", "9 baje")
     m_hi_pre = re.search(r"\b(subah|shaam|dopahar|raat)\s*(?:ke\s*)?(0?\d|1\d|2[0-3])\s*(?:baje)?\b", low)
@@ -214,11 +220,13 @@ def extract_time_slot(text: str, fallback_slot: Optional[str] = None) -> Optiona
             h += 12
         return f"{h:02d}:00 - {(h + 1) % 24:02d}:00"
 
-    # 5. Standalone 24-hour format (e.g. "06:00", "07:00", "08:00", "09:00", "16:00", "17:00", "18:00", "19:00")
-    m_24h = re.search(r"\b(0[0-9]|1[0-9]|2[0-3]):00\b", low)
+    # 5. Standalone 24-hour format (e.g. "06:30", "07:00", "08:15", "09:00", "16:00")
+    m_24h = re.search(r"\b(0[0-9]|1[0-9]|2[0-3]):([0-5]\d)\b", low)
     if m_24h:
         h = int(m_24h.group(1))
-        return f"{h:02d}:00 - {(h + 1) % 24:02d}:00"
+        m = int(m_24h.group(2))
+        end_h = (h + 1) % 24
+        return f"{h:02d}:{m:02d} - {end_h:02d}:{m:02d}"
 
     # 6. Special keywords & periods of the day
     if re.search(r"\b(?:evening|shaam)\b", low):
@@ -1802,14 +1810,14 @@ def process_query(query: str, current_user: Dict[str, Any], session_id: str = "d
                     alt_tomorrow = tools.find_alternative_slots(detected_sport, tomorrow_date)
                     slots_tomorrow = alt_tomorrow.get("available_slots", [])
                     
-                    time_12hr = slot_start_time.strftime("%I %p").lstrip('0')
+                    time_12hr = slot_start_time.strftime("%I:%M %p").lstrip('0')
                     msg_parts = [f"{time_12hr} has passed."]
                     
                     if upcoming_slots:
                         upcoming_str_list = []
                         for s in upcoming_slots[:3]:
                             s_start_time = datetime.strptime(s.split("-")[0].strip(), "%H:%M").time()
-                            upcoming_str_list.append(s_start_time.strftime("%I %p").lstrip('0'))
+                            upcoming_str_list.append(s_start_time.strftime("%I:%M %p").lstrip('0'))
                         msg_parts.append(f"Available upcoming slots today: {', '.join(upcoming_str_list)}.")
                     else:
                         msg_parts.append("No more slots available today.")

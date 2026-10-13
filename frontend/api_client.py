@@ -145,3 +145,11 @@ def api_get_advanced_analytics(token):
 def api_run_comprehensive_benchmark(token):
     url = f"{API_BASE_URL}/analytics/comprehensive-benchmark"
     return requests.get(url, headers=_get_headers(token), timeout=30)
+
+def api_scan_qr_code(token, qr_code):
+    url = f"{API_BASE_URL}/bookings/scan-qr"
+    return requests.post(url, json={"qr_code": qr_code}, headers=_get_headers(token), timeout=10)
+
+def api_get_scan_history(token, booking_id):
+    url = f"{API_BASE_URL}/bookings/{booking_id}/scan-history"
+    return requests.get(url, headers=_get_headers(token), timeout=10)

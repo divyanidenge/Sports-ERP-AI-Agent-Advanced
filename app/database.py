@@ -98,6 +98,8 @@ def init_db():
         status TEXT NOT NULL DEFAULT 'confirmed',
         notes TEXT,
         idempotency_key TEXT UNIQUE,
+        qr_code TEXT UNIQUE,
+        actual_entry_time TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
         FOREIGN KEY (facility_id) REFERENCES facilities(id) ON DELETE CASCADE,
@@ -163,11 +165,17 @@ def migrate_db(conn):
     if user_cols and "is_blocked" not in user_cols:
         cursor.execute("ALTER TABLE users ADD COLUMN is_blocked INTEGER DEFAULT 0")
     
-    # 2. Check if 'bookings' table has 'idempotency_key' column
+    # 2. Check if 'bookings' table has 'idempotency_key', 'qr_code', 'actual_entry_time' columns
     cursor.execute("PRAGMA table_info(bookings)")
     booking_cols = [r["name"] if isinstance(r, sqlite3.Row) else r[1] for r in cursor.fetchall()]
-    if booking_cols and "idempotency_key" not in booking_cols:
-        cursor.execute("ALTER TABLE bookings ADD COLUMN idempotency_key TEXT")
+    if booking_cols:
+        if "idempotency_key" not in booking_cols:
+            cursor.execute("ALTER TABLE bookings ADD COLUMN idempotency_key TEXT")
+        if "qr_code" not in booking_cols:
+            cursor.execute("ALTER TABLE bookings ADD COLUMN qr_code TEXT")
+            cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_bookings_qr_code ON bookings(qr_code) WHERE qr_code IS NOT NULL")
+        if "actual_entry_time" not in booking_cols:
+            cursor.execute("ALTER TABLE bookings ADD COLUMN actual_entry_time TIMESTAMP")
     
     # 3. Ensure 'audit_logs' table exists
     cursor.execute("""

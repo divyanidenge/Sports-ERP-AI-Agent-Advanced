@@ -1,7 +1,12 @@
 import sqlite3
+import uuid
 from datetime import date, datetime
 from typing import List, Optional, Dict, Any
 from fastapi import HTTPException, status
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from app.config import SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD
 from app.database import get_db_connection
 from app.models import (
     SportCreate, SportResponse,
@@ -282,10 +287,11 @@ def create_booking(user_id: int, data: BookingCreate) -> BookingResponse:
             pass
     
     # 4. Atomic Insert with Concurrency Protection (Unique Partial Index Guard)
+    qr_code = uuid.uuid4().hex
     try:
         cursor.execute(
-            "INSERT INTO bookings (user_id, facility_id, sport_id, booking_date, time_slot, status, notes, idempotency_key) VALUES (?, ?, ?, ?, ?, 'confirmed', ?, ?)",
-            (user_id, data.facility_id, data.sport_id, data.booking_date, computed_time_slot, data.notes or "", data.idempotency_key.strip() if data.idempotency_key else None)
+            "INSERT INTO bookings (user_id, facility_id, sport_id, booking_date, time_slot, status, notes, idempotency_key, qr_code) VALUES (?, ?, ?, ?, ?, 'confirmed', ?, ?, ?)",
+            (user_id, data.facility_id, data.sport_id, data.booking_date, computed_time_slot, data.notes or "", data.idempotency_key.strip() if data.idempotency_key else None, qr_code)
         )
         conn.commit()
         booking_id = cursor.lastrowid
@@ -305,11 +311,121 @@ def create_booking(user_id: int, data: BookingCreate) -> BookingResponse:
             detail=f"Facility is already booked for date {data.booking_date} at slot {computed_time_slot}."
         )
     
+    # Send Email Notification
+    def send_qr_email(user_email, booking_id, qr_code, facility, date, slot):
+        if not SMTP_HOST or not SMTP_USERNAME:
+            print("SMTP configuration not found. Skipping real email.")
+            return
+
+        subject = f"Your Sports Booking Confirmation & QR Ticket (#{booking_id})"
+        html_body = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="margin: 0; padding: 0; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #f3f4f6;">
+            <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+                <tr>
+                    <td style="padding: 20px 0 30px 0;">
+                        <table align="center" border="0" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); border: 1px solid #e5e7eb; border-collapse: collapse;">
+                            <!-- Header -->
+                            <tr>
+                                <td align="center" style="padding: 30px 0 20px 0; background-color: #1e3a8a; border-radius: 8px 8px 0 0;">
+                                    <h1 style="color: #ffffff; font-size: 24px; margin: 0; letter-spacing: 1px;">CAMPUS SPORTS ERP</h1>
+                                    <p style="color: #bfdbfe; font-size: 14px; margin: 5px 0 0 0;">Booking Confirmation & Entry Ticket</p>
+                                </td>
+                            </tr>
+                            
+                            <!-- Body -->
+                            <tr>
+                                <td style="padding: 30px 40px 10px 40px;">
+                                    <h2 style="color: #1f2937; font-size: 20px; margin: 0 0 15px 0;">Hello!</h2>
+                                    <p style="color: #4b5563; font-size: 16px; line-height: 24px; margin: 0 0 20px 0;">
+                                        Your sports facility reservation has been confirmed. Below are your booking details and the QR code ticket for entry.
+                                    </p>
+                                    
+                                    <!-- Details Box -->
+                                    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; margin-bottom: 25px;">
+                                        <tr>
+                                            <td style="padding: 20px;">
+                                                <p style="margin: 0 0 10px 0; font-size: 15px; color: #334155;"><strong>Booking ID:</strong> #{booking_id}</p>
+                                                <p style="margin: 0 0 10px 0; font-size: 15px; color: #334155;"><strong>Facility:</strong> {facility}</p>
+                                                <p style="margin: 0 0 10px 0; font-size: 15px; color: #334155;"><strong>Date:</strong> {date}</p>
+                                                <p style="margin: 0; font-size: 15px; color: #334155;"><strong>Time Slot:</strong> {slot}</p>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                </td>
+                            </tr>
+                            
+                            <!-- QR Code Section -->
+                            <tr>
+                                <td align="center" style="padding: 10px 40px 30px 40px;">
+                                    <h3 style="color: #1f2937; font-size: 18px; margin: 0 0 15px 0;">Your Entry QR Code</h3>
+                                    <div style="background-color: #ffffff; padding: 15px; border: 2px dashed #cbd5e1; display: inline-block; border-radius: 8px;">
+                                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={qr_code}" alt="QR Code" width="200" height="200" style="display: block; border: 0;" />
+                                    </div>
+                                    <p style="color: #64748b; font-size: 13px; margin: 15px 0 0 0;">
+                                        Please present this QR code to the staff at the venue to check in.<br>
+                                        If the image does not load, your manual entry code is: <strong>{qr_code}</strong>
+                                    </p>
+                                </td>
+                            </tr>
+                            
+                            <!-- Footer -->
+                            <tr>
+                                <td align="center" style="padding: 20px; background-color: #f1f5f9; border-radius: 0 0 8px 8px; border-top: 1px solid #e2e8f0;">
+                                    <p style="color: #94a3b8; font-size: 12px; margin: 0;">
+                                        &copy; 2026 Campus Sports ERP. All rights reserved.<br>
+                                        This is an automated message, please do not reply.
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+        </body>
+        </html>
+        """
+        
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = SMTP_USERNAME
+        msg["To"] = user_email
+        msg.attach(MIMEText(html_body, "html"))
+        
+        try:
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+                server.starttls()
+                server.login(SMTP_USERNAME, SMTP_PASSWORD)
+                server.sendmail(SMTP_USERNAME, user_email, msg.as_string())
+            print(f"Successfully sent QR email to {user_email}")
+        except Exception as e:
+            print(f"Failed to send email to {user_email}: {e}")
+            
+    cursor.execute("SELECT email FROM users WHERE id = ?", (user_id,))
+    u_email = cursor.fetchone()["email"]
+    
+    send_qr_email(u_email, booking_id, qr_code, fac["name"], data.booking_date, computed_time_slot)
+    
+    log_audit_event(
+        action="EMAIL_SENT",
+        status="SUCCESS",
+        user_id=user_id,
+        resource_type="booking",
+        resource_id=booking_id,
+        details=f"Sent Email to user with QR code for booking {booking_id}"
+    )
+    
     cursor.execute("""
         SELECT b.id, b.user_id, u.name as user_name, u.email as user_email,
                b.facility_id, f.name as facility_name,
                b.sport_id, s.name as sport_name,
-               b.booking_date, b.time_slot, b.status, b.notes, b.idempotency_key, b.created_at
+               b.booking_date, b.time_slot, b.status, b.notes, b.idempotency_key, 
+               b.qr_code, b.actual_entry_time, b.created_at
         FROM bookings b
         LEFT JOIN users u ON b.user_id = u.id
         LEFT JOIN facilities f ON b.facility_id = f.id
@@ -336,7 +452,8 @@ def list_user_bookings(user_id: int) -> List[BookingResponse]:
         SELECT b.id, b.user_id, u.name as user_name, u.email as user_email,
                b.facility_id, f.name as facility_name,
                b.sport_id, s.name as sport_name,
-               b.booking_date, b.time_slot, b.status, b.notes, b.idempotency_key, b.created_at
+               b.booking_date, b.time_slot, b.status, b.notes, b.idempotency_key, 
+               b.qr_code, b.actual_entry_time, b.created_at
         FROM bookings b
         LEFT JOIN users u ON b.user_id = u.id
         LEFT JOIN facilities f ON b.facility_id = f.id
@@ -355,7 +472,8 @@ def list_all_bookings() -> List[BookingResponse]:
         SELECT b.id, b.user_id, u.name as user_name, u.email as user_email,
                b.facility_id, f.name as facility_name,
                b.sport_id, s.name as sport_name,
-               b.booking_date, b.time_slot, b.status, b.notes, b.idempotency_key, b.created_at
+               b.booking_date, b.time_slot, b.status, b.notes, b.idempotency_key, 
+               b.qr_code, b.actual_entry_time, b.created_at
         FROM bookings b
         LEFT JOIN users u ON b.user_id = u.id
         LEFT JOIN facilities f ON b.facility_id = f.id
@@ -581,7 +699,8 @@ def reschedule_booking(booking_id: int, user_id: int, data: BookingReschedule, i
         SELECT b.id, b.user_id, u.name as user_name, u.email as user_email,
                b.facility_id, f.name as facility_name,
                b.sport_id, s.name as sport_name,
-               b.booking_date, b.time_slot, b.status, b.notes, b.idempotency_key, b.created_at
+               b.booking_date, b.time_slot, b.status, b.notes, b.idempotency_key,
+               b.qr_code, b.actual_entry_time, b.created_at
         FROM bookings b
         LEFT JOIN users u ON b.user_id = u.id
         LEFT JOIN facilities f ON b.facility_id = f.id
@@ -601,6 +720,81 @@ def reschedule_booking(booking_id: int, user_id: int, data: BookingReschedule, i
     
     return BookingResponse(**dict(updated_row))
 
+def scan_qr_code(qr_code: str, admin_user_id: int) -> Dict[str, Any]:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT id, status, booking_date, time_slot, user_id
+        FROM bookings
+        WHERE qr_code = ?
+    """, (qr_code,))
+    booking = cursor.fetchone()
+    
+    if not booking:
+        conn.close()
+        log_audit_event("QR_SCAN_FAILED", user_id=admin_user_id, details=f"Invalid QR Code scanned: {qr_code}")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid QR Code")
+        
+    booking_id = booking["id"]
+    if booking["status"] == "attended":
+        conn.close()
+        log_audit_event("QR_SCAN_FAILED", user_id=admin_user_id, resource_type="booking", resource_id=booking_id, details="QR Code already used")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="QR Code already used")
+    elif booking["status"] == "cancelled":
+        conn.close()
+        log_audit_event("QR_SCAN_FAILED", user_id=admin_user_id, resource_type="booking", resource_id=booking_id, details="Attempt to scan cancelled booking")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Booking was cancelled")
+        
+    today_iso = date.today().isoformat()
+    if booking["booking_date"] != today_iso:
+        conn.close()
+        log_audit_event("QR_SCAN_FAILED", user_id=admin_user_id, resource_type="booking", resource_id=booking_id, details=f"Invalid booking date ({booking['booking_date']} vs {today_iso})")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid booking date / Expired")
+        
+    cursor.execute("UPDATE bookings SET status = 'attended', actual_entry_time = CURRENT_TIMESTAMP WHERE id = ?", (booking_id,))
+    
+    # Mark Attendance automatically
+    cursor.execute(
+        "INSERT INTO attendance (booking_id, user_id, status, marked_by) VALUES (?, ?, ?, ?)",
+        (booking_id, booking["user_id"], "present", admin_user_id)
+    )
+    conn.commit()
+    
+    cursor.execute("""
+        SELECT b.id, b.user_id, u.name as user_name, u.email as user_email,
+               b.facility_id, f.name as facility_name,
+               b.sport_id, s.name as sport_name,
+               b.booking_date, b.time_slot, b.status, b.notes, b.idempotency_key,
+               b.qr_code, b.actual_entry_time, b.created_at
+        FROM bookings b
+        LEFT JOIN users u ON b.user_id = u.id
+        LEFT JOIN facilities f ON b.facility_id = f.id
+        LEFT JOIN sports s ON b.sport_id = s.id
+        WHERE b.id = ?
+    """, (booking_id,))
+    updated_booking = cursor.fetchone()
+    conn.close()
+    
+    log_audit_event("QR_SCAN_SUCCESS", user_id=admin_user_id, resource_type="booking", resource_id=booking_id, details="QR Code scanned successfully")
+    
+    return {
+        "message": "Check-in successful",
+        "booking": BookingResponse(**dict(updated_booking))
+    }
+
+def get_scan_history(booking_id: int) -> List[Dict[str, Any]]:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT id, user_id, action, details, created_at
+        FROM audit_logs
+        WHERE resource_type = 'booking' AND resource_id = ? AND action LIKE 'QR_SCAN_%'
+        ORDER BY created_at DESC
+    """, (booking_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 # --- ATTENDANCE SERVICE ---
 def mark_attendance(data: AttendanceCreate, marked_by: int) -> AttendanceResponse:

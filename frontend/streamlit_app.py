@@ -526,7 +526,14 @@ def render_bookings():
     st.markdown(f"<div class='main-header'>{title}</div>", unsafe_allow_html=True)
     st.markdown(f"<div class='sub-header'>{subtitle}</div>", unsafe_allow_html=True)
 
-    tab_my_bookings, tab_book = st.tabs(["📋 Reservation History", "📝 Book a Slot"])
+    tabs = ["📋 Reservation History", "📝 Book a Slot"]
+    if is_admin:
+        tabs.append("📷 QR Scanner")
+        
+    st_tabs = st.tabs(tabs)
+    tab_my_bookings = st_tabs[0]
+    tab_book = st_tabs[1]
+    tab_qr_scanner = st_tabs[2] if is_admin else None
 
     with tab_my_bookings:
         view_all = False
@@ -541,7 +548,7 @@ def render_bookings():
             else:
                 today_str = date.today().isoformat()
                 upcoming = [b for b in b_list if b["booking_date"] >= today_str and b["status"] == "confirmed"]
-                completed = [b for b in b_list if b["booking_date"] < today_str and b["status"] == "confirmed"]
+                completed = [b for b in b_list if b["booking_date"] < today_str and b["status"] in ["confirmed", "attended"]]
                 cancelled = [b for b in b_list if b["status"] == "cancelled"]
 
                 if not is_admin:
@@ -558,10 +565,35 @@ def render_bookings():
                 rename_cols = {
                     "user_name": "Student", "sport_name": "Sport",
                     "facility_name": "Facility", "booking_date": "Date", "time_slot": "Slot",
-                    "status": "Status", "notes": "Notes"
+                    "status": "Status", "actual_entry_time": "Entry Time", "notes": "Notes"
                 }
                 display_cols = [c for c in rename_cols.keys() if c in df.columns]
                 st.dataframe(df[display_cols].rename(columns=rename_cols), use_container_width=True, hide_index=True)
+                
+                st.divider()
+                st.markdown("#### View Entry Ticket / QR Code")
+                ticket_bookings = [b for b in b_list if b["status"] == "confirmed" or b["status"] == "attended"]
+                if ticket_bookings:
+                    ticket_dict = {f"#{b['id']} - {b['sport_name']} at {b['facility_name']} on {b['booking_date']} ({b['time_slot']})": b for b in ticket_bookings}
+                    selected_ticket = st.selectbox("Select Booking", list(ticket_dict.keys()), key="view_ticket_sel")
+                    b = ticket_dict[selected_ticket]
+                    t_col1, t_col2 = st.columns([1, 2])
+                    with t_col1:
+                        if b.get("qr_code"):
+                            st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={b['qr_code']}", caption="Scan at Entry")
+                        else:
+                            st.info("No QR Code generated for this legacy booking.")
+                    with t_col2:
+                        st.markdown(f"**Booking ID:** {b['id']}")
+                        st.markdown(f"**Status:** `{b['status'].upper()}`")
+                        if b.get('actual_entry_time'):
+                            st.markdown(f"**Check-in Time:** {b['actual_entry_time']}")
+                        if is_admin and st.button("View Scan History", key=f"hist_{b['id']}"):
+                            hist_resp = api.api_get_scan_history(token, b['id'])
+                            if hist_resp.status_code == 200:
+                                st.write(hist_resp.json())
+                            else:
+                                st.error("Failed to load history")
 
                 st.divider()
                 st.markdown("#### Cancel a Reservation")
@@ -581,6 +613,57 @@ def render_bookings():
                     st.write("No active confirmed bookings to cancel.")
         else:
             st.error("Could not fetch bookings.")
+
+    if tab_qr_scanner:
+        with tab_qr_scanner:
+            st.subheader("📷 Scan Entry QR Code")
+            st.markdown("Use a barcode scanner, your device's camera, or enter the QR Code hash manually below.")
+            
+            scan_method = st.radio("Scanning Method", ["Camera", "Text Input"], horizontal=True)
+            scanned_code = ""
+
+            if scan_method == "Camera":
+                camera_image = st.camera_input("Take a picture of the QR code")
+                if camera_image is not None:
+                    import cv2
+                    import numpy as np
+                    
+                    file_bytes = np.asarray(bytearray(camera_image.read()), dtype=np.uint8)
+                    img = cv2.imdecode(file_bytes, 1)
+                    
+                    detector = cv2.QRCodeDetector()
+                    data_qr, bbox, _ = detector.detectAndDecode(img)
+                    
+                    if data_qr:
+                        st.success(f"QR Code detected: `{data_qr}`")
+                        scanned_code = data_qr
+                    else:
+                        st.error("No QR code detected in the image. Please try again or use the Text Input method.")
+            else:
+                scanned_code = st.text_input("QR Code Hash", placeholder="Enter or scan QR code here...", key="qr_code_input")
+                
+            if st.button("✅ Verify & Check-In", type="primary"):
+                if not scanned_code.strip():
+                    st.warning("Please enter a QR code.")
+                else:
+                    scan_resp = api.api_scan_qr_code(token, scanned_code.strip())
+                    if scan_resp.status_code == 200:
+                        data = scan_resp.json()
+                        st.success(data["message"])
+                        b = data["booking"]
+                        st.json({
+                            "Booking ID": b["id"],
+                            "Student": b["user_name"],
+                            "Facility": b["facility_name"],
+                            "Time": f"{b['booking_date']} {b['time_slot']}",
+                            "Entry Time": b["actual_entry_time"]
+                        })
+                    else:
+                        try:
+                            err = scan_resp.json().get("detail", "Unknown error")
+                        except:
+                            err = "Invalid QR code or server error."
+                        st.error(f"Scan Failed: {err}")
 
     with tab_book:
         st.subheader("Reserve a Sports Court / Facility")

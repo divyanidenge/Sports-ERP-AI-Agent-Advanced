@@ -18,3 +18,8 @@ else:
     DB_PATH = str((BASE_DIR / raw_db).resolve())
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+
+SMTP_HOST = os.getenv("SMTP_HOST")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USERNAME = os.getenv("SMTP_USERNAME")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")

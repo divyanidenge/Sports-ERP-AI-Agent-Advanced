@@ -4,6 +4,7 @@ from app.models import (
     SportCreate, SportResponse,
     FacilityCreate, FacilityResponse,
     BookingCreate, BookingResponse, BookingReschedule,
+    QRScanRequest, QRScanResponse,
     AttendanceCreate, AttendanceResponse,
     DashboardStats, AdvancedAnalytics, AuditLogResponse
 )
@@ -65,6 +66,14 @@ def cancel_booking_endpoint(booking_id: int, current_user: dict = Depends(get_cu
 def reschedule_booking_endpoint(booking_id: int, data: BookingReschedule, current_user: dict = Depends(get_current_user)):
     is_admin = (current_user["role"] == "admin")
     return sports_service.reschedule_booking(booking_id, current_user["id"], data, is_admin)
+
+@router.post("/bookings/scan-qr", response_model=QRScanResponse)
+def scan_qr_code_endpoint(data: QRScanRequest, admin: dict = Depends(require_admin)):
+    return sports_service.scan_qr_code(data.qr_code, admin["id"])
+
+@router.get("/bookings/{booking_id}/scan-history")
+def get_booking_scan_history(booking_id: int, admin: dict = Depends(require_admin)):
+    return sports_service.get_scan_history(booking_id)
 
 # --- Attendance ---
 @router.get("/attendance", response_model=List[AttendanceResponse])

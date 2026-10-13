@@ -94,7 +94,16 @@ class BookingResponse(BaseModel):
     status: str
     notes: Optional[str] = None
     idempotency_key: Optional[str] = None
+    qr_code: Optional[str] = None
+    actual_entry_time: Optional[str] = None
     created_at: Optional[str] = None
+
+class QRScanRequest(BaseModel):
+    qr_code: str
+
+class QRScanResponse(BaseModel):
+    message: str
+    booking: BookingResponse
 
 # --- Attendance Models ---
 class AttendanceCreate(BaseModel):
